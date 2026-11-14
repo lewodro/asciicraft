@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voxelterm"
+version = "1.0.0"
+description = "A procedural voxel world raycast into colored ASCII, for the terminal and the browser"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Nicholas Lundgren" }]
+license = { text = "MIT" }
+keywords = ["voxel", "ascii", "raycasting", "terminal", "procedural", "perlin"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Topic :: Games/Entertainment",
+    "Topic :: Multimedia :: Graphics :: 3D Rendering",
+]
+dependencies = []
+
+[project.scripts]
+voxelterm = "voxelterm.app:main"
+
+[tool.setuptools]
+packages = ["voxelterm"]

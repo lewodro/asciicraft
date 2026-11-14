@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Byte-compile
+        run: python3 -m py_compile main.py voxelterm/*.py tools/*.py
+
+      - name: Render a snapshot
+        run: python3 main.py --small --snapshot frame.ansi --width 80 --height 24
+
+      - name: Benchmark the serial renderer
+        run: python3 main.py --small --benchmark 3 --width 80 --height 24 --serial
+
+      - name: Check the packaged entry point
+        run: python3 -m voxelterm --help
