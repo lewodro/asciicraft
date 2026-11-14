@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A procedurally generated voxel world drawn entirely with coloured ASCII characters.">
+<title>VOXELTERM - ASCII voxel world</title>
+<style>
+  :root {
+    --bg: #05070b;
+    --panel: #0b1017;
+    --ink: #9bb9d2;
+    --dim: #58718a;
+    --accent: #7fd6a4;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                 "Liberation Mono", monospace;
+    overflow: hidden;
+  }
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    display: block;
+    background: #06090e;
+    box-shadow: 0 0 0 1px #16202b, 0 18px 70px rgba(0, 0, 0, 0.65);
+  }
+  #overlay {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 35%, rgba(12, 22, 33, 0.92),
+                rgba(4, 6, 10, 0.97));
+    z-index: 10;
+    transition: opacity 180ms ease;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  .card {
+    width: min(560px, calc(100vw - 40px));
+    padding: 26px 28px;
+    border: 1px solid #1d2b39;
+    background: linear-gradient(180deg, #0b1118, #080d13);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  }
+  h1 {
+    margin: 0 0 4px; font-size: 22px; letter-spacing: 0.22em;
+    color: #d7e6f4; font-weight: 600;
+  }
+  .tag { margin: 0 0 18px; color: var(--dim); font-size: 12px; }
+  #status {
+    margin: 0 0 14px; font-size: 13px; line-height: 1.5;
+    color: var(--accent); min-height: 20px; white-space: pre-wrap;
+  }
+  #controls {
+    margin: 0 0 18px; padding: 12px 14px;
+    border: 1px solid #17222e; background: #070c12;
+    color: var(--ink); font-size: 12px; line-height: 1.85;
+  }
+  #controls b { color: #d7e6f4; font-weight: 600; }
+  form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  label { font-size: 12px; color: var(--dim); }
+  input[type=number] {
+    width: 130px; padding: 7px 9px;
+    background: #060b11; color: #d7e6f4;
+    border: 1px solid #22303e; font: inherit; font-size: 12px;
+    outline: none;
+  }
+  input[type=number]:focus { border-color: #3a5a74; }
+  button {
+    padding: 7px 14px; font: inherit; font-size: 12px; cursor: pointer;
+    background: #12202c; color: #cfe3f2; border: 1px solid #27405a;
+  }
+  button:hover { background: #172a39; border-color: #3a5f80; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  .fine { margin: 16px 0 0; color: var(--dim); font-size: 11px; line-height: 1.6; }
+  .fine code { color: #9fc5e2; }
+</style>
+</head>
+<body>
+<noscript>
+  <p style="padding:24px">VOXELTERM needs JavaScript to generate and draw the world.</p>
+</noscript>
+<div id="stage"><canvas id="screen" width="640" height="360"></canvas></div>
+
+<div id="overlay">
+  <div class="card">
+    <h1>VOXELTERM</h1>
+    <p class="tag">a 1024 x 256 x 80 voxel world, rendered only with coloured ASCII</p>
+    <p id="status">Starting…</p>
+    <div id="controls">
+      <b>W A S D</b> move &nbsp; <b>Arrows</b> / drag look &nbsp; <b>Space</b> up &nbsp; <b>C</b> down<br>
+      <b>E</b> run &nbsp; <b>M</b> render mode &nbsp; <b>R</b> new seed &nbsp; <b>Q</b> pause
+    </div>
+    <form id="seedForm">
+      <label for="seedInput">seed</label>
+      <input id="seedInput" type="number" min="0" max="4294967295" step="1" value="1337">
+      <button id="loadBtn" type="submit">Load world</button>
+      <button id="resumeBtn" type="button">Resume</button>
+    </form>
+    <p class="fine">
+      Share the URL to share the world (<code>?seed=1337</code>). Everything runs
+      locally in one static file; no server, no libraries.
+    </p>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var MODE_CYCLE = ["ascii-color", "ascii-mono", "half"];
+  var MODE_LABEL = {
+    "ascii-color": "ASCII COLOR",
+    "ascii-mono": "ASCII MONO",
+    "half": "HALF-BLOCK"
+  };
+  var FONT = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+
+  var canvas = document.getElementById("screen");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var overlay = document.getElementById("overlay");
+  var statusEl = document.getElementById("status");
+  var seedInput = document.getElementById("seedInput");
+  var loadBtn = document.getElementById("loadBtn");
+  var resumeBtn = document.getElementById("resumeBtn");
+  var seedForm = document.getElementById("seedForm");
+
+  var params = new URLSearchParams(location.search);
+  var seed = parseInt(params.get("seed"), 10);
+  if (!isFinite(seed) || seed < 0) seed = 1337;
+  seed = seed >>> 0;
+  var mode = MODE_CYCLE.indexOf(params.get("mode")) >= 0 ?
+    params.get("mode") : "ascii-color";
+  var fov = parseFloat(params.get("fov"));
+  if (!isFinite(fov) || fov < 40 || fov > 120) fov = 76;
+  var lookScale = parseFloat(params.get("look"));
+  if (!isFinite(lookScale) || lookScale < 0.2 || lookScale > 3) lookScale = 1.0;
+
+  var world = null;
+  var camera = null;
+  var renderer = null;
+  var view = null;
+  var held = Object.create(null);
+  var paused = true;
+  var generating = false;
+  var lastTime = 0;
+  var fps = 0;
+  var fpsAccum = 0;
+  var fpsFrames = 0;
+  var colorCache = new Map();
+  var dragging = false;
+
+  seedInput.value = String(seed);
+
+  // ------------------------------------------------------------- layout
+  function layout() {
+    var winW = window.innerWidth, winH = window.innerHeight;
+    var fontSize = winW < 620 ? 10 : winW < 980 ? 11 : winW < 1500 ? 13 : 15;
+    var pad = 24;
+    var cols = 48, rows = 18, cw = 6, ch = 12, hudH = 12;
+    var MAX_CELLS = 9000;
+
+    // Grow the font until the grid fits the cell budget; this keeps the
+    // per-frame glyph count (the real cost) bounded on large displays.
+    for (var pass = 0; pass < 5; pass++) {
+      ctx.font = fontSize + "px " + FONT;
+      try { ctx.fontKerning = "none"; } catch (e) {}
+      cw = ctx.measureText("M").width || fontSize * 0.6;
+      ch = Math.max(fontSize + 2, Math.round(cw * 2.0));
+      hudH = ch;
+      cols = Math.max(48, Math.min(240, Math.floor((winW - pad) / cw)));
+      rows = Math.max(18, Math.min(110, Math.floor((winH - pad - hudH) / ch)));
+      if (cols * rows <= MAX_CELLS || fontSize >= 26) break;
+      fontSize = Math.min(26, fontSize * Math.sqrt(cols * rows / MAX_CELLS) * 1.03);
+    }
+
+    // Final measurement with the settled font size.
+    ctx.font = fontSize + "px " + FONT;
+    try { ctx.fontKerning = "none"; } catch (e) {}
+    cw = ctx.measureText("M").width || fontSize * 0.6;
+    ch = Math.max(fontSize + 2, Math.round(cw * 2.0));
+    hudH = ch;
+    cols = Math.max(48, Math.min(240, Math.floor((winW - pad) / cw)));
+    rows = Math.max(18, Math.min(110, Math.floor((winH - pad - hudH) / ch)));
+
+    var cssW = Math.round(cols * cw);
+    var cssH = Math.round(rows * ch + hudH);
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = fontSize + "px " + FONT;
+    try { ctx.fontKerning = "none"; } catch (e) {}
+
+    view = {
+      cols: cols, rows: rows, cw: cw, ch: ch, hudH: hudH,
+      cssW: cssW, cssH: cssH, fontSize: fontSize
+    };
+  }
+
+  function rebuildRenderer() {
+    if (!world || !camera) return;
+    renderer = new VT.Renderer(world, camera, view.cols, view.rows, mode);
+  }
+
+  // ---------------------------------------------------------- world setup
+  function showOverlay(text, isPaused) {
+    statusEl.textContent = text;
+    overlay.classList.remove("hidden");
+    resumeBtn.style.display = isPaused ? "" : "none";
+    loadBtn.disabled = generating;
+    seedInput.disabled = generating;
+    if (isPaused) resumeBtn.focus();
+  }
+
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+  }
+
+  function setSeedInUrl() {
+    var q = "?seed=" + seed;
+    if (mode !== "ascii-color") q += "&mode=" + mode;
+    if (Math.round(fov) !== 76) q += "&fov=" + Math.round(fov);
+    if (lookScale !== 1) q += "&look=" + lookScale.toFixed(2);
+    try { history.replaceState(null, "", q); } catch (e) { /* file:// */ }
+  }
+
+  function loadWorld(nextSeed) {
+    if (generating) return;
+    generating = true;
+    paused = true;
+    held = Object.create(null);
+    seed = nextSeed >>> 0;
+    seedInput.value = String(seed);
+    setSeedInUrl();
+    showOverlay("Generating " + VT.WORLD_WIDTH + " x " + VT.WORLD_DEPTH +
+                " x " + VT.WORLD_HEIGHT + " voxels, seed " + seed + "…", false);
+    // Let the browser paint the overlay before the synchronous generator runs.
+    setTimeout(function () {
+      var t0 = performance.now();
+      world = new VT.World(seed);
+      world.generate();
+      var spawn = world.spawn;
+      camera = new VT.Camera(spawn[0], spawn[1], spawn[2], spawn[3], spawn[4], fov);
+      layout();
+      rebuildRenderer();
+      generating = false;
+      paused = false;
+      lastTime = performance.now();
+      seedInput.value = String(seed);
+      if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+      hideOverlay();
+    }, 40);
+  }
+
+  // ------------------------------------------------------------- drawing
+  function cssFor(packed) {
+    var s = colorCache.get(packed);
+    if (s === undefined) {
+      s = "#" + ("000000" + packed.toString(16)).slice(-6);
+      if (colorCache.size > 24000) colorCache.clear();
+      colorCache.set(packed, s);
+    }
+    return s;
+  }
+
+  function drawAscii() {
+    var px = renderer.pixels;
+    var cols = view.cols, rows = view.rows;
+    var cw = view.cw, ch = view.ch, font = view.fontSize + "px " + FONT;
+    var mono = (mode === "ascii-mono");
+    var ramp = VT.ASCII_RAMP, last = ramp.length - 1;
+    var bg = "#06090e";
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, view.cssW, view.cssH);
+    ctx.font = font;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+
+    for (var row = 0; row < rows; row++) {
+      var base = row * cols;
+      var runStart = 0, runColor = -1, runText = "";
+      var y = row * ch + Math.round(ch * 0.76);
+      for (var x = 0; x <= cols; x++) {
+        var color = -1, ch1 = "";
+        if (x < cols) {
+          var rgb = px[base + x];
+          var lum = Math.pow(VT.luminance(rgb), 0.72);
+          ch1 = ramp.charAt(Math.floor(lum * last + 0.5));
+          if (mono) {
+            var v = Math.floor(58 + 190 * Math.pow(lum, 0.9));
+            if (v > 255) v = 255;
+            color = (v << 16) | (v << 8) | v;
+          } else {
+            var r = (rgb >> 16) & 255, g = (rgb >> 8) & 255, b = rgb & 255;
+            r = Math.min(255, Math.floor(r * 1.10 + 8));
+            g = Math.min(255, Math.floor(g * 1.10 + 8));
+            b = Math.min(255, Math.floor(b * 1.10 + 8));
+            color = (r << 16) | (g << 8) | b;
+          }
+        }
+        if (x === cols || color !== runColor) {
+          if (runColor >= 0 && runText) {
+            ctx.fillStyle = cssFor(runColor);
+            ctx.fillText(runText, runStart * cw, y);
+          }
+          runStart = x;
+          runColor = color;
+          runText = "";
+        }
+        if (x < cols) runText += ch1;
+      }
+    }
+  }
+
+  function drawHalf() {
+    var px = renderer.pixels;
+    var cols = view.cols, rows = view.rows;
+    var cw = view.cw, ch = view.ch, font = view.fontSize + "px " + FONT;
+    ctx.fillStyle = "#06090e";
+    ctx.fillRect(0, 0, view.cssW, view.cssH);
+    ctx.font = font;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+
+    for (var row = 0; row < rows; row++) {
+      var topBase = row * 2 * cols;
+      var botBase = topBase + cols;
+      var runStart = 0, runFg = -1, runBg = -1;
+      for (var x = 0; x <= cols; x++) {
+        var fg = 0, bg = 0;
+        if (x < cols) {
+          var t = px[topBase + x], b = px[botBase + x];
+          fg = ((t >> 16) & 255) << 16 | ((t >> 8) & 255) << 8 | (t & 255);
+          bg = ((b >> 16) & 255) << 16 | ((b >> 8) & 255) << 8 | (b & 255);
+        }
+        if (x === cols || fg !== runFg || bg !== runBg) {
+          var len = x - runStart;
+          if (len > 0) {
+            ctx.fillStyle = cssFor(runBg);
+            ctx.fillRect(runStart * cw, row * ch, len * cw, ch);
+            if (runFg >= 0) {
+              var glyphs = "";
+              for (var k = 0; k < len; k++) glyphs += "\u2580";
+              ctx.fillStyle = cssFor(runFg);
+              ctx.fillText(glyphs, runStart * cw, row * ch + ch * 0.5);
+            }
+          }
+          runStart = x; runFg = fg; runBg = bg;
+        }
+      }
+    }
+  }
+
+  function statusLine() {
+    var label = MODE_LABEL[mode] || mode;
+    var left = " VT " + fps.toFixed(1) + "fps | seed " + seed + " | " + label +
+      " | x" + Math.round(camera.x) + "/" + world.width +
+      " y" + Math.round(camera.y) + " z" + Math.round(camera.z) +
+      " | " + view.cols + "x" + view.rows;
+    var hint = "  WASD move | arrows look | Space/C fly | E run | M mode | R seed | Q pause";
+    if ((left + hint).length <= view.cols) return left + hint;
+    return left.length <= view.cols ? left : left.slice(0, view.cols);
+  }
+
+  function drawHud() {
+    var y = view.rows * view.ch;
+    ctx.fillStyle = "#121820";
+    ctx.fillRect(0, y, view.cssW, view.hudH);
+    ctx.fillStyle = "#9bb9d2";
+    ctx.font = Math.round(view.fontSize * 0.92) + "px " + FONT;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    var text = statusLine();
+    ctx.fillText(text, 6, y + view.hudH * 0.52);
+  }
+
+  function draw() {
+    if (mode === "half") drawHalf();
+    else drawAscii();
+    drawHud();
+  }
+
+  // --------------------------------------------------------------- input
+  function eventKey(e) {
+    var k = e.key;
+    if (k === " ") return "space";
+    if (k === "ArrowLeft") return "arrowleft";
+    if (k === "ArrowRight") return "arrowright";
+    if (k === "ArrowUp") return "arrowup";
+    if (k === "ArrowDown") return "arrowdown";
+    if (k.length === 1) return k.toLowerCase();
+    return k.toLowerCase();
+  }
+
+  function typingTarget() {
+    var el = document.activeElement;
+    return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+  }
+
+  window.addEventListener("keydown", function (e) {
+    var k = eventKey(e);
+    var nav = ["space", "arrowleft", "arrowright", "arrowup", "arrowdown"];
+    if (nav.indexOf(k) >= 0) e.preventDefault();
+
+    if (typingTarget()) {
+      if (k === "escape") { seedInput.blur(); }
+      return;
+    }
+    if (!world) return;
+
+    if (k === "q" || k === "escape") {
+      paused = !paused;
+      held = Object.create(null);
+      if (paused) {
+        showOverlay("Paused. Seed " + seed + " — " + MODE_LABEL[mode] + ".",
+                    true);
+      } else {
+        hideOverlay();
+        lastTime = performance.now();
+      }
+      return;
+    }
+    if (k === "m") {
+      var idx = MODE_CYCLE.indexOf(mode);
+      mode = MODE_CYCLE[(idx + 1) % MODE_CYCLE.length];
+      setSeedInUrl();
+      rebuildRenderer();
+      if (paused) showOverlay("Paused. Seed " + seed + " — " +
+                              MODE_LABEL[mode] + ".", true);
+      return;
+    }
+    if (k === "r") {
+      loadWorld((Math.random() * 0xFFFFFFFF) >>> 0);
+      return;
+    }
+    held[k] = true;
+  });
+
+  window.addEventListener("keyup", function (e) {
+    held[eventKey(e)] = false;
+  });
+
+  window.addEventListener("blur", function () {
+    held = Object.create(null);
+    dragging = false;
+  });
+
+  // Drag to look.
+  canvas.addEventListener("pointerdown", function (e) {
+    dragging = true;
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = "grabbing";
+  });
+  canvas.addEventListener("pointerup", function (e) {
+    dragging = false;
+    canvas.style.cursor = "default";
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!dragging || !camera || paused) return;
+    camera.look(e.movementX * 0.0019 * lookScale,
+                -e.movementY * 0.00155 * lookScale);
+  });
+
+  // --------------------------------------------------------------- resize
+  var resizeTimer = 0;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (!world) return;
+      layout();
+      rebuildRenderer();
+    }, 120);
+  });
+
+  // ---------------------------------------------------------------- forms
+  seedForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = parseInt(seedInput.value, 10);
+    if (!isFinite(v) || v < 0) return;
+    loadWorld(v >>> 0);
+  });
+  resumeBtn.addEventListener("click", function () {
+    if (generating || !world) return;
+    paused = false;
+    hideOverlay();
+    lastTime = performance.now();
+  });
+
+  // ----------------------------------------------------------------- loop
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!world || !renderer || paused || generating) return;
+
+    var dt = Math.min(0.1, Math.max(0.001, (now - lastTime) / 1000));
+    lastTime = now;
+
+    var forward = (held.w ? 1 : 0) - (held.s ? 1 : 0);
+    var strafe = (held.d ? 1 : 0) - (held.a ? 1 : 0);
+    var vertical = (held.space ? 1 : 0) - ((held.c || held.x) ? 1 : 0);
+    camera.move(dt, forward, strafe, vertical, world, !!held.e);
+    var lookY = (held.arrowright ? 1 : 0) - (held.arrowleft ? 1 : 0);
+    var lookP = (held.arrowup ? 1 : 0) - (held.arrowdown ? 1 : 0);
+    if (lookY || lookP) {
+      camera.look(lookY * dt * 1.30 * lookScale,
+                  lookP * dt * 0.95 * lookScale);
+    }
+
+    var t0 = performance.now();
+    renderer.render(now / 1000);
+    draw();
+    var drawDt = (performance.now() - t0) / 1000;
+    fpsAccum += drawDt;
+    fpsFrames += 1;
+    if (fpsAccum >= 0.25) {
+      var measured = fpsFrames / fpsAccum;
+      fps = fps ? fps * 0.55 + measured * 0.45 : measured;
+      fpsAccum = 0;
+      fpsFrames = 0;
+    }
+  }
+
+  // ----------------------------------------------------------------- boot
+  layout();
+  loadWorld(seed);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
