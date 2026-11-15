@@ -72,8 +72,19 @@ globalThis.requestAnimationFrame = function (fn) {
   rafCallbacks.push(fn);
   return rafCallbacks.length;
 };
-globalThis.setTimeout = function (fn) { timeouts.push(fn); return timeouts.length; };
-globalThis.clearTimeout = function () {};
+var timeoutId = 0;
+globalThis.setTimeout = function (fn, delay) {
+  var wait = Number(delay);
+  if (!isFinite(wait) || wait < 0) wait = 0;
+  var id = ++timeoutId;
+  timeouts.push({ id: id, fn: fn, at: now + wait });
+  return id;
+};
+globalThis.clearTimeout = function (id) {
+  for (var i = 0; i < timeouts.length; i++) {
+    if (timeouts[i].id === id) { timeouts.splice(i, 1); return; }
+  }
+};
 
 globalThis.addEventListener = function (type, fn) {
   listeners["window:" + type] = fn;
@@ -101,8 +112,41 @@ var m = src.match(/<script>([\s\S]*?)<\/script>/);
 if (!m) throw new Error("inline script not found");
 (0, eval)(m[1]);
 
+function earliestTimeout() {
+  var best = 0;
+  for (var i = 1; i < timeouts.length; i++) {
+    if (timeouts[i].at < timeouts[best].at) best = i;
+  }
+  return best;
+}
+
+function runNextTimeout() {
+  if (!timeouts.length) throw new Error("no pending timeout");
+  var t = timeouts.splice(earliestTimeout(), 1)[0];
+  if (t.at > now) now = t.at;
+  t.fn();
+  return t.at;
+}
+
+function runDueTimeouts() {
+  var guard = 0;
+  while (timeouts.length) {
+    var i = earliestTimeout();
+    if (timeouts[i].at > now) break;
+    var t = timeouts.splice(i, 1)[0];
+    if (++guard > 100) throw new Error("timeout loop");
+    t.fn();
+  }
+}
+
 function flushTimeouts() {
-  while (timeouts.length) timeouts.shift()();
+  var guard = 0;
+  while (timeouts.length) {
+    var t = timeouts.splice(earliestTimeout(), 1)[0];
+    if (t.at > now) now = t.at;
+    if (++guard > 100) throw new Error("timeout loop");
+    t.fn();
+  }
 }
 
 function dispatch(kind, key) {
@@ -120,11 +164,29 @@ function pump(frames) {
   }
 }
 
-// --- boot
-flushTimeouts();
-if (!elements.overlay.classList.contains("hidden")) {
-  throw new Error("overlay should be hidden after generation");
+// --- boot: the intro card must survive a full two-second hold
+var generationAt = runNextTimeout();
+if (elements.overlay.classList.contains("hidden")) {
+  throw new Error("overlay dismissed before the splash hold");
 }
+var revealAt = timeouts.length ? timeouts[earliestTimeout()].at : Infinity;
+if (revealAt < 2000) {
+  throw new Error("intro hold is shorter than 2s: " + revealAt + "ms");
+}
+dispatch("keydown", "q");
+if (elements.overlay.classList.contains("hidden")) {
+  throw new Error("Q dismissed the intro before the hold elapsed");
+}
+now = 1999;
+runDueTimeouts();
+if (elements.overlay.classList.contains("hidden")) {
+  throw new Error("overlay dismissed before the hold elapsed");
+}
+runNextTimeout();
+if (!elements.overlay.classList.contains("hidden")) {
+  throw new Error("overlay still visible after the hold");
+}
+print("intro hold ok:", generationAt + "ms generation, " + revealAt + "ms reveal");
 pump(3);
 if (fillTextCalls < 10) throw new Error("no ASCII glyph runs drawn");
 print("boot ok: fillText", fillTextCalls, "fillRect", fillRectCalls);

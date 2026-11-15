@@ -154,6 +154,11 @@
   var fpsFrames = 0;
   var colorCache = new Map();
   var dragging = false;
+  // The intro card is part of the experience: keep it up long enough to read
+  // the controls instead of flashing past while the world generates.
+  var SPLASH_MS = 2200;
+  var splashHold = 0;
+  var revealTimer = 0;
 
   seedInput.value = String(seed);
 
@@ -232,14 +237,19 @@
     try { history.replaceState(null, "", q); } catch (e) { /* file:// */ }
   }
 
-  function loadWorld(nextSeed) {
+  function loadWorld(nextSeed, intro) {
     if (generating) return;
     generating = true;
     paused = true;
     held = Object.create(null);
+    if (revealTimer) { clearTimeout(revealTimer); revealTimer = 0; }
     seed = nextSeed >>> 0;
     seedInput.value = String(seed);
     setSeedInUrl();
+    // A reseed must not cut an intro hold short.
+    var t = performance.now();
+    var remaining = Math.max(0, splashHold - t);
+    splashHold = t + Math.max(remaining, intro ? SPLASH_MS : 0);
     showOverlay("Generating " + VT.WORLD_WIDTH + " x " + VT.WORLD_DEPTH +
                 " x " + VT.WORLD_HEIGHT + " voxels, seed " + seed + "…", false);
     // Let the browser paint the overlay before the synchronous generator runs.
@@ -252,14 +262,29 @@
       layout();
       rebuildRenderer();
       generating = false;
-      paused = false;
-      lastTime = performance.now();
       seedInput.value = String(seed);
       if (document.activeElement && document.activeElement.blur) {
         document.activeElement.blur();
       }
-      hideOverlay();
+      showOverlay("Ready. Seed " + seed + " — " + MODE_LABEL[mode] + ".", false);
+      revealWorld();
     }, 40);
+  }
+
+  // Dismiss the intro only once both the world is ready and the minimum
+  // splash hold has elapsed.
+  function revealWorld() {
+    revealTimer = 0;
+    if (generating || !world) return;
+    var wait = splashHold - performance.now();
+    if (wait > 0) {
+      revealTimer = setTimeout(revealWorld, Math.ceil(wait));
+      return;
+    }
+    splashHold = 0;
+    paused = false;
+    hideOverlay();
+    lastTime = performance.now();
   }
 
   // ------------------------------------------------------------- drawing
@@ -419,6 +444,8 @@
     if (!world) return;
 
     if (k === "q" || k === "escape") {
+      // The intro card is not dismissible until its minimum hold elapses.
+      if (splashHold > performance.now()) return;
       paused = !paused;
       held = Object.create(null);
       if (paused) {
@@ -440,7 +467,7 @@
       return;
     }
     if (k === "r") {
-      loadWorld((Math.random() * 0xFFFFFFFF) >>> 0);
+      loadWorld((Math.random() * 0xFFFFFFFF) >>> 0, false);
       return;
     }
     held[k] = true;
@@ -487,7 +514,7 @@
     e.preventDefault();
     var v = parseInt(seedInput.value, 10);
     if (!isFinite(v) || v < 0) return;
-    loadWorld(v >>> 0);
+    loadWorld(v >>> 0, false);
   });
   resumeBtn.addEventListener("click", function () {
     if (generating || !world) return;
@@ -531,7 +558,7 @@
 
   // ----------------------------------------------------------------- boot
   layout();
-  loadWorld(seed);
+  loadWorld(seed, true);
   requestAnimationFrame(frame);
 })();
 </script>
