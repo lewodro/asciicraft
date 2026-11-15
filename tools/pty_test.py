@@ -88,7 +88,7 @@ def run(argv: list[str], rows: int = 30, cols: int = 100) -> int:
         i = text.find("Traceback")
         print(text[i:i + 2000])
         return 1
-    statuses = re.findall(r"VT\s+[\d.]+fps \| seed \d+ \| ([A-Z ]+)", text)
+    statuses = re.findall(r"(?:AC|VT)\s+[\d.]+fps \| seed \d+ \| ([A-Z ]+)", text)
     seen = []
     for mode in statuses:
         if not seen or seen[-1] != mode:

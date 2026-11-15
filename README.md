@@ -1,58 +1,101 @@
-# VOXELTERM
+<div align="center">
 
-A procedurally generated voxel world, raycast into **coloured ASCII characters** —
-in your terminal, or in a single static web page.
+# ASCIICRAFT
 
-- 1024 × 256 × 80 voxels (21 million cells) of hills, lakes, snow-capped ridges,
-  caves and trees, all generated from one seed
-- about **five minutes** to walk across the world at walking speed
-- truecolor ASCII with directional face light, procedural grain, ambient
-  occlusion and exponential distance fog
-- smooth WASD flight, arrow-key look, sprint, instant reseeding
-- **zero dependencies**: Python standard library only; the web build is two
-  static files with no libraries and no build step
+### ASCII Minecraft in your terminal.
 
-```
-                             .::.
-        ...                 .:;;;;:.        ..
-      .:;;;:.             .;;;;;;;;;:.    .:;;:.
-   ..:;;;;;;;:..        .:;;;;;;;;;;;;;:.:;;;;;:.
-  .:;;;;;;;;;;;;;:.   .:;;;;;;;;;;;;;;;;;;;;;;;;:.
- :;;;;;;;;;;;;;;;;;:.;;;;;;;;;;;;;;;;;;;;;;;;;;;;:
-```
+A procedural voxel world — hills, lakes, caves, forests and snow — raycast into
+**colored characters**. No GPU, no textures, no game engine, no dependencies.
+
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)](pyproject.toml)
+[![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Live demo](https://img.shields.io/badge/live_demo-browser-5ad48a)](https://lewodro.github.io/asciicraft/)
+
+**[Play in the browser](https://lewodro.github.io/asciicraft/)** ·
+[Quick start](#quick-start) · [Screenshots](#screenshots) · [How it works](#how-it-works)
+
+</div>
+
+<a href="https://lewodro.github.io/asciicraft/">
+  <img src="assets/asciicraft-highlands.png" alt="ASCIICRAFT: a snowy voxel landscape drawn with colored ASCII characters" width="100%">
+</a>
+
+<p align="center"><em>Seed 1337 · 123 × 34 character cells · ascii-color mode</em></p>
+
+## What is this?
+
+ASCIICRAFT is a small digital-art experiment: a 1024 × 256 × 80 voxel world
+(21 million cells) rendered entirely as text. Every character cell fires one ray
+into the terrain; the surface colour is reduced to a glyph and a foreground
+colour, then streamed to your terminal.
+
+The result is a world you can fly through in real time, made of nothing but
+printable characters and ANSI colour codes.
+
+- **21 million voxels** generated from a single seed
+- **About five minutes** to walk across at walking speed
+- Hills, lakes, beaches, caves, forests and snow-capped ridges
+- Truecolor ASCII with directional face lighting, ambient occlusion, procedural
+  grain, animated water and distance fog
+- Terminal build in **pure Python** (standard library only) and a matching
+  **browser build** in two static files
+- Fork-parallel renderer: ~60 FPS at 160 × 48 characters on a laptop
 
 ## Quick start
 
-### Terminal (macOS, Linux, WSL)
+### Terminal
 
 ```bash
-cd voxelterm
-./run.sh                 # or: python3 main.py
+git clone https://github.com/lewodro/asciicraft.git
+cd asciicraft
+./run.sh
 ```
 
-Requires Python **3.9+**. The first full world takes about 7 seconds to
-generate; the view then opens in the alternate screen. Press **Q** to quit.
-
-Other launch styles:
+Requires Python **3.9+** on macOS, Linux or WSL. The first launch generates the
+full world in about 7 seconds, then opens the view. Press **Q** to quit.
 
 ```bash
-python3 -m voxelterm                     # run as a module
-pip install -e .                         # optional install
-voxelterm                                # console script after install
+./run.sh --small          # 256 × 128 × 80 world, generates in under a second
+./run.sh --seed 42        # choose a world
+./run.sh --look 0.7       # calmer look speed
+python3 -m voxelterm      # module entry point
+pip install -e .          # optional install, then run `asciicraft`
 ```
 
-Native Windows has no `termios`, so the interactive terminal is not available
-there. Use **WSL**, or open the web build below.
+Native Windows does not provide `termios`; use **WSL** for the terminal build,
+or use the browser build.
 
 ### Browser
 
+**[lewodro.github.io/asciicraft](https://lewodro.github.io/asciicraft/)** — no
+install, no build step. To run it locally:
+
 ```bash
-./serve.sh                               # http://localhost:8000/web/
+./serve.sh
+# http://localhost:8000/web/
 ```
 
-Then open <http://localhost:8000/web/>. You can also open `web/index.html`
-directly from disk — there is no server logic and no build step. On Windows use
+You can also open `web/index.html` directly from disk. Windows users can run
 `serve.bat`.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%">
+<img src="assets/asciicraft-valley.png" alt="A green ASCII valley with dense terrain" width="100%">
+<p><em>Seed 1337 · valley floor · ascii-color</em></p>
+</td>
+<td width="50%">
+<img src="assets/asciicraft-snowline.png" alt="Snow-capped ASCII mountains with bright glyphs" width="100%">
+<p><em>Seed 600970973 · snow line · ascii-color</em></p>
+</td>
+</tr>
+</table>
+
+All captures are real frames from the renderer. The commands used to reproduce
+them are in [`assets/README.md`](assets/README.md).
 
 ## Controls
 
@@ -67,57 +110,86 @@ directly from disk — there is no server logic and no build step. On Windows us
 | `M` | cycle `ascii-color → half → ascii-mono` |
 | `R` | generate a new random world |
 | `[` `]` | lower / raise render quality |
-| `Q`, `Esc` (or Ctrl-C / Ctrl-D) | quit |
+| `Q`, `Esc` | quit |
 
 Terminals cannot report a bare Shift key, so `C`/`X` is the portable descend
 key and `E` is hold-to-sprint.
 
 Web controls are the same, with mouse drag or arrow keys to look. `Q`/`Esc`
-pauses and shows the seed box.
+pauses and reveals the seed box.
 
 ### Look sensitivity
 
-Look speed has a comfortable default and can be scaled without editing code:
+The default is tuned to be comfortable. Scale it with `--look` in the terminal
+or `?look=` in the browser:
 
 ```bash
-./run.sh --look 0.7        # slower, 70% of default
-./run.sh --look 1.4        # faster
+./run.sh --look 0.7
 ```
 
-In the browser use the matching URL parameter:
-
 ```
-http://localhost:8000/web/?look=0.7
+https://lewodro.github.io/asciicraft/?look=0.7
 ```
 
-`--look` accepts `0.2`–`3.0`; values outside that range are clamped. The default
-is `1.0`.
+`--look` accepts `0.2`–`3.0`; values outside that range are clamped.
 
-## One-shot modes
+## How the ASCII rendering works
 
-No TTY is needed for these:
+Each character cell gets one ray. On a hit, the shader produces an RGB colour,
+which is converted to a glyph plus a foreground colour:
 
-```bash
-# Write one frame (raw ANSI escape codes) to a file
-python3 main.py --snapshot frame.ansi --width 160 --height 48
-
-# Measure render throughput without opening the UI
-python3 main.py --benchmark 30 --width 160 --height 48 --mode ascii-color
-
-# Use a small 256x128x80 world for quick control testing
-python3 main.py --small
-
-# Render a PNG preview in half-block mode
-python3 tools/preview.py --seed 1337 --out preview.png
+```python
+lum  = (0.2126*R + 0.7152*G + 0.0722*B) / 255   # Rec. 709 luminance
+tone = lum ** 0.72                              # lift the mid-tones
+idx  = int(tone * (len(RAMP) - 1) + 0.5)        # pick a glyph
+fg   = (min(255, int(R*1.10 + 8)), ...)         # lift for legibility
 ```
+
+The ramp has 70 glyphs, from space to `$`:
+
+```text
+ .'`^",:;Il!i><~+_-?][}{1)(|\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$
+```
+
+Brightness chooses the character; colour is carried separately by the ANSI
+foreground. Six face directions get different light levels so cubes still read
+as cubes, a hash-based material shader adds grass, stone, wood and snow texture,
+and distance fades into the sky gradient.
+
+**Read the full pipeline, with exact constants and worked examples:
+[`docs/ascii-rendering.md`](docs/ascii-rendering.md).**
+
+### Modes
+
+| Mode | What it does |
+| --- | --- |
+| `ascii-color` | 70-glyph ramp + truecolor foreground (default) |
+| `half` | `▀` with independent top/bottom colours, 2× vertical detail |
+| `ascii-mono` | same glyphs, one grey value per cell |
+
+Press **M** to cycle modes live.
+
+## Performance
+
+Measured on an arm64 macOS laptop with 6 forked workers, 160 × 48 character
+cells, after world generation:
+
+| Mode | Pixels | FPS |
+| --- | --- | --- |
+| `ascii-color` | 160 × 48 | ≈ 60 |
+| `half` | 160 × 96 | ≈ 31 |
+
+Full Python world generation takes ≈ 7 s; the small world takes < 1 s. The
+renderer splits scanlines across forked workers and falls back to serial mode
+where `fork` is unavailable (`--serial` forces this).
 
 ## CLI options
 
-```
+```text
 --seed N             world seed (default 1337)
 --mode MODE          ascii-color (default) | half | ascii-mono
 --fov DEG            horizontal field of view (default 76)
---look SCALE         look sensitivity multiplier 0.2..3.0 (default 1.0)
+--look SCALE         look sensitivity, 0.2..3.0 (default 1.0)
 --width / --height   render size in character cells (0 = terminal size)
 --pixels N           approximate ray budget for automatic layout
 --workers N          0 = auto, 1 = serial forked renderer
@@ -125,164 +197,80 @@ python3 tools/preview.py --seed 1337 --out preview.png
 --no-hud             hide the status line
 --world-width/-depth/-height N   custom world size
 --small              shorthand for 256 x 128 x 80
---snapshot FILE      render one frame and exit
+--snapshot FILE      render one frame to an ANSI file and exit
 --benchmark N        render N frames and report FPS
 ```
 
-Default world and scale:
+## Browser build
 
-| Property | Value |
-| --- | --- |
-| Grid | 1024 × 256 × 80 voxels (21 M cells) |
-| Sea level | y = 29 |
-| Walking speed | 3.4 blocks/s |
-| Crossing the 1024-wide world | ≈ 5 minutes (≈ 2.8 min sprinting) |
-| Spawn | high, open ground near the middle with water in view |
-| Default seed | 1337 |
-
-## How the ASCII rendering works
-
-Every character cell gets one ray. The ray hits a voxel face, the procedural
-shader returns an RGB colour, and that colour is reduced to **one printable
-glyph plus a foreground colour**.
-
-The glyph is chosen from a 70-character density ramp:
+`web/index.html` + `web/engine.js` are a direct port of the Python engine: the
+same MT19937 seeding, Perlin noise, terrain/cave/tree generation, DDA traversal
+and shader. The seed lives in the URL, so every view is shareable:
 
 ```text
- .'`^",:;Il!i><~+_-?][}{1)(|\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$
+https://lewodro.github.io/asciicraft/?seed=1337
+https://lewodro.github.io/asciicraft/?seed=42&mode=ascii-mono
+https://lewodro.github.io/asciicraft/?seed=42&fov=90&look=0.7
 ```
 
-Brightness selects the glyph; hue stays in the colour channel:
-
-```python
-lum  = (0.2126*R + 0.7152*G + 0.0722*B) / 255   # Rec. 709 luminance
-tone = lum ** 0.72                              # lift the mid-tones
-idx  = int(tone * (len(RAMP) - 1) + 0.5)        # pick a glyph
-fg   = (min(255, int(R*1.10 + 8)), ...)         # keep it legible on black
-```
-
-Shading happens before that conversion: six face directions get deliberately
-different light levels so cubes still read as cubes, hash-based grain supplies
-grass blades and stone veins, a three-voxel probe darkens tight corners, water
-gets animated wave bands, and distance fades into the same sky gradient that the
-sun and horizon use.
-
-The optional `half` mode uses `▀` with independent top and bottom colours for
-twice the vertical resolution; `ascii-mono` keeps the glyphs but uses one grey
-value per cell.
-
-**Full explanation with the exact constants, worked examples and tuning
-knobs: [`docs/ascii-rendering.md`](docs/ascii-rendering.md).**
-
-### Performance
-
-Measured on the development machine (arm64 macOS, 6 forked workers), 160×48
-character cells, after world generation:
-
-| Mode | Pixels | FPS |
-| --- | --- | --- |
-| `ascii-color` | 160 × 48 | ≈ 60 |
-| `half` | 160 × 96 | ≈ 31 |
-
-Full Python world generation takes ≈ 7 s; the small world is under 1 s. The
-renderer splits scanlines across forked workers; `--serial` disables that, and
-auto mode falls back to serial where `fork` is unavailable.
-
-## Web build
-
-`web/index.html` + `web/engine.js` are a self-contained static build.
-
-```bash
-./serve.sh
-# open http://localhost:8000/web/
-```
-
-To publish, upload the two files together to any static host — GitHub Pages,
-Netlify, Vercel, Cloudflare Pages, S3, or a folder on your own server. No build
-step, no dependencies, no external requests. If you publish the whole
-repository, the root `index.html` redirects to `web/`.
-
-The seed lives in the URL, so a view is shareable:
-
-```
-https://example.com/web/?seed=1337
-https://example.com/web/?seed=42&mode=ascii-mono
-https://example.com/web/?seed=42&fov=90&look=0.7
-```
-
-The browser engine is a direct port of the terminal engine: the same MT19937
-seeding, Perlin noise, terrain/cave/tree generation, DDA traversal and shader.
 `tools/web_parity.py` verifies that seed 1337 produces an identical voxel grid
 in both implementations and that rendered frames agree to ~99% of pixels
 (remaining differences are last-bit `sin`/`cos` variations between libms).
 
-## Project layout
-
-```
-voxelterm/
-  README.md                 this file
-  LICENSE                   MIT
-  pyproject.toml            optional packaging + `voxelterm` console script
-  main.py                   entry point
-  run.sh                    terminal launcher
-  serve.sh / serve.bat      static web server launchers
-  index.html                redirects a published repo to web/
-  docs/
-    ascii-rendering.md      the RGB -> glyph -> ANSI pipeline in detail
-  voxelterm/
-    blocks.py               block ids, face lighting, occluder set
-    noise.py                classic Perlin 2D/3D + fBm
-    world.py                height field, caves, trees, chunks, 8^3 macro cache
-    camera.py               first-person basis, movement, look limits
-    raycaster.py            hierarchical voxel DDA + surface shader
-    ansi.py                 ASCII ramp -> TrueColor ANSI frame buffer
-    terminal.py             raw terminal session + repeat-aware key parser
-    parallel.py             fork-based scanline bands
-    app.py                  main loop, layout, modes, snapshot/benchmark
-  web/
-    engine.js               JS port of noise, world, camera and raycaster
-    index.html              canvas ASCII renderer, input, HUD, seed UI
-    README.md               web-specific notes and deploy options
-  tools/
-    preview.py              render a frame to PNG (half-block)
-    pty_test.py             drive the interactive app through a pseudo-terminal
-    web_check.js            headless engine checks (jsc)
-    web_frame.js            dump one web frame as PPM (jsc)
-    web_dom_test.js         DOM-stubbed browser smoke test (jsc)
-    web_parity.py           compare JS output with the Python engine
-```
+To publish your own copy, upload `web/` to any static host. GitHub Pages can
+serve the repository root: the root `index.html` redirects to `web/`.
 
 ## How it works
 
 **World.** A domain-warped continental fBm plus a ridged mountain mask builds the
-height map. Columns are filled with stone/dirt/grass/sand/snow, water fills up to
-sea level, two intersecting 3D noise isosurfaces carve tunnel networks plus
-larger caverns, and a jittered lattice plants trees. The dense `bytearray` is
-mirrored into 16³ chunks for inspection, while an 8³ occupancy array lets the
-ray tracer jump over empty air.
+height map. Columns are filled with stone, dirt, grass, sand and snow; water
+fills to sea level; two intersecting 3D noise isosurfaces carve tunnels and
+caverns; a jittered lattice plants trees. A dense `bytearray` holds the voxels,
+an 8³ occupancy array lets the tracer skip empty air, and 16³ chunks are kept
+for inspection.
 
-**Tracing.** Each character cell gets a ray from an orthonormal camera basis.
-A coarse DDA walks 8³ macro cells until it finds an occupied one, then an exact
-voxel DDA walks only that segment. Hits return block id, face normal, face UV and
-distance. Coefficients are precomputed per resize, so the per-ray cost is one
-multiply-add per ray component.
+**Tracing.** Each cell gets a ray from an orthonormal camera basis. A coarse DDA
+walks 8³ macro cells until it finds an occupied one, then an exact voxel DDA
+walks only that segment. Hits return block id, face normal, face UV and distance.
 
-**Compositing.** The shader returns linear-ish RGB; face light, AO and fog are
-applied, and the ANSI encoder turns packed RGB into one string with minimal
-escape sequences (colour only changes when it must). The game loop performs one
-`stdout.write` per frame and never clears the screen between frames.
+**Compositing.** Face light, AO and fog are applied to the material colour. The
+ANSI encoder emits one string per frame, changing colour only when a run ends, so
+the terminal never sees a partially painted image and the screen is never cleared
+between frames.
+
+## Project layout
+
+```text
+asciicraft/
+├── main.py                 entry point
+├── voxelterm/              Python engine and terminal app
+│   ├── world.py            terrain, caves, trees, macro cache
+│   ├── raycaster.py        hierarchical voxel DDA + shader
+│   ├── ansi.py             70-glyph ramp + ANSI encoder
+│   ├── terminal.py         raw terminal + key parser
+│   ├── parallel.py         fork-based scanline bands
+│   └── app.py              loop, layout, modes, snapshot/benchmark
+├── web/                    dependency-free browser port
+├── tools/                  preview, PTY, parity, DOM and screenshot tools
+├── assets/                 README screenshots
+├── docs/
+│   ├── ascii-rendering.md  the full RGB → glyph → ANSI pipeline
+│   └── launch-post.md      short launch copy for social posts
+├── run.sh / serve.sh       local launchers
+└── pyproject.toml          optional packaging
+```
 
 ## Development checks
 
 ```bash
 python3 -m py_compile main.py voxelterm/*.py tools/*.py
 python3 tools/pty_test.py --small --width 70 --height 18   # input/quit/mode test
-python3 tools/web_parity.py                                # Python <-> JS parity
+python3 tools/web_parity.py                                # Python ↔ JS parity
 ```
 
-`tools/web_dom_test.js` and the other `tools/*.js` files run under the macOS
-JavaScriptCore shell (`jsc`). They are development helpers, not required to play.
-The JS tools assume the repository root as the working directory.
+The `tools/*.js` files run under the macOS JavaScriptCore shell (`jsc`) and are
+development helpers, not required to play. `tools/screenshot.py` uses headless
+Chrome to regenerate the README images.
 
 ## Notes and limits
 
@@ -290,10 +278,17 @@ The JS tools assume the repository root as the working directory.
   modern Linux terminals, Windows Terminal via WSL).
 - Interactive mode requires a TTY; use `--snapshot` or `--benchmark` when
   redirecting output.
-- Regenerating a full world takes a few seconds in Python; the web engine
-  generates the same grid in about 0.2 s.
 - There is no persistence or block editing yet — the world is read-only.
+- Regenerating a full world takes a few seconds in Python; the browser engine
+  generates the same grid in about 0.2 s.
 
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+<div align="center">
+
+If this made you smile, **star the repo** and share it with someone who lives in
+a terminal.
+
+</div>

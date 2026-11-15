@@ -1,6 +1,6 @@
-# How VOXELTERM turns a world into ASCII
+# How ASCIICRAFT turns a world into ASCII
 
-VOXELTERM never draws a polygon. It fires one ray per character cell, asks what
+ASCIICRAFT never draws a polygon. It fires one ray per character cell, asks what
 surface that ray hit, converts the surface colour into a **single printable glyph
 plus a foreground colour**, and streams those glyphs to the terminal. A frame is
 just text — about 8,000 characters for a 160×48 view.
@@ -133,7 +133,7 @@ brightness.
 ### 4.2 Gamma-ish tone curve
 
 Raw luminance is not evenly distributed: most natural surfaces sit between 0.2
-and 0.6, where a linear ramp would waste most of its glyphs. VOXELTERM raises
+and 0.6, where a linear ramp would waste most of its glyphs. ASCIICRAFT raises
 luminance to `0.72`:
 
 ```python

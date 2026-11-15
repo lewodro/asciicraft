@@ -1,4 +1,4 @@
-# VOXELTERM web build
+# ASCIICRAFT web build
 
 A static, dependency-free version of the terminal voxel world. Two files:
 
@@ -6,6 +6,8 @@ A static, dependency-free version of the terminal voxel world. Two files:
 | --- | --- |
 | `index.html` | canvas renderer, input, HUD, seed UI |
 | `engine.js` | Perlin noise, world generation, camera, DDA raycaster |
+
+Live build: <https://lewodro.github.io/asciicraft/>
 
 ## Run locally
 

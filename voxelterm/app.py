@@ -176,7 +176,7 @@ class Game:
         cam = self.camera
         mode = MODE_LABELS[self.mode]
         workers = self.worker_count if self.par is not None else 1
-        left = (f" VT {self.fps:4.1f}fps | seed {self.seed} | {mode} | "
+        left = (f" AC {self.fps:4.1f}fps | seed {self.seed} | {mode} | "
                 f"x{cam.x:.0f}/{self.world.width} y{cam.y:.0f} z{cam.z:.0f} | "
                 f"{self.width}x{self.cell_height} | {workers}w")
         keys = " WASD move | arrows look | Space/C fly | E run | M mode | R seed | Q quit"
@@ -365,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     w, d, h = world_dims(args)
     print(
-        "VOXELTERM - truecolor voxel world in your terminal\n"
+        "ASCIICRAFT - truecolor voxel world in your terminal\n"
         "  WASD move  |  arrows look  |  Space up  |  C down  |  E run\n"
         "  M render mode  |  R new seed  |  [ ] quality  |  Q quit\n"
         f"  World: {w} x {d} x {h} | about five minutes to walk across\n",

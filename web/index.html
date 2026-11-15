@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="A procedurally generated voxel world drawn entirely with coloured ASCII characters.">
-<title>VOXELTERM - ASCII voxel world</title>
+<title>ASCIICRAFT - ASCII voxel world</title>
 <style>
   :root {
     --bg: #05070b;
@@ -82,13 +82,13 @@
 </head>
 <body>
 <noscript>
-  <p style="padding:24px">VOXELTERM needs JavaScript to generate and draw the world.</p>
+  <p style="padding:24px">ASCIICRAFT needs JavaScript to generate and draw the world.</p>
 </noscript>
 <div id="stage"><canvas id="screen" width="640" height="360"></canvas></div>
 
 <div id="overlay">
   <div class="card">
-    <h1>VOXELTERM</h1>
+    <h1>ASCIICRAFT</h1>
     <p class="tag">a 1024 x 256 x 80 voxel world, rendered only with coloured ASCII</p>
     <p id="status">Starting…</p>
     <div id="controls">
@@ -363,7 +363,7 @@
 
   function statusLine() {
     var label = MODE_LABEL[mode] || mode;
-    var left = " VT " + fps.toFixed(1) + "fps | seed " + seed + " | " + label +
+    var left = " AC " + fps.toFixed(1) + "fps | seed " + seed + " | " + label +
       " | x" + Math.round(camera.x) + "/" + world.width +
       " y" + Math.round(camera.y) + " z" + Math.round(camera.z) +
       " | " + view.cols + "x" + view.rows;

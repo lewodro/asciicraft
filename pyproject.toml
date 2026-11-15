@@ -3,14 +3,14 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "voxelterm"
+name = "asciicraft"
 version = "1.0.0"
-description = "A procedural voxel world raycast into colored ASCII, for the terminal and the browser"
+description = "ASCII Minecraft for your terminal: a procedural voxel world raycast into colored characters"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Nicholas Lundgren" }]
 license = { text = "MIT" }
-keywords = ["voxel", "ascii", "raycasting", "terminal", "procedural", "perlin"]
+keywords = ["voxel", "ascii", "raycasting", "terminal", "procedural", "perlin", "minecraft"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Environment :: Console",
@@ -19,7 +19,14 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/lewodro/asciicraft"
+Repository = "https://github.com/lewodro/asciicraft"
+Live Demo = "https://lewodro.github.io/asciicraft/"
+Changelog = "https://github.com/lewodro/asciicraft/commits/main"
+
 [project.scripts]
+asciicraft = "voxelterm.app:main"
 voxelterm = "voxelterm.app:main"
 
 [tool.setuptools]
