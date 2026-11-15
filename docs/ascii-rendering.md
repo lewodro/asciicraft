@@ -92,6 +92,10 @@ Then three lighting terms are applied:
 ```text
 light = FACE_LIGHT[normal] * ambient_occlusion
 rgb   = material_rgb * light
+
+lum   = 0.2126*R + 0.7152*G + 0.0722*B
+rgb   = (lum + (rgb - lum) * 1.12) * 1.18
+
 rgb   = mix(rgb, sky(direction), fog)
 fog   = 1 - exp(-(distance / 94)²)
 ```
@@ -101,11 +105,11 @@ fog   = 1 - exp(-(distance / 94)²)
 | Face | Light |
 | --- | --- |
 | top | 1.00 |
-| bottom | 0.40 |
-| +X | 0.62 |
-| −X | 0.58 |
-| +Z | 0.82 |
-| −Z | 0.76 |
+| bottom | 0.44 |
+| +X | 0.70 |
+| −X | 0.65 |
+| +Z | 0.88 |
+| −Z | 0.81 |
 
 That difference is what makes a cube read as a cube even after its colour has
 been reduced to one character. Ambient occlusion darkens the inside edges of a
@@ -175,12 +179,12 @@ Examples using colours the shader actually produces:
 
 | Surface | RGB | luminance | tone | index | glyph |
 | --- | --- | ---: | ---: | ---: | :---: |
-| grass top | 77, 132, 54 | 0.450 | 0.563 | 39 | `z` |
-| lit stone side | 86, 91, 95 | 0.354 | 0.473 | 33 | `r` |
-| water surface | 35, 98, 151 | 0.347 | 0.467 | 32 | `j` |
-| snow | 219, 226, 234 | 0.879 | 0.911 | 63 | `W` |
+| grass top | 86, 158, 55 | 0.530 | 0.633 | 44 | `C` |
+| lit stone side | 101, 107, 113 | 0.416 | 0.532 | 37 | `v` |
+| water surface | 34, 117, 187 | 0.409 | 0.526 | 36 | `u` |
+| snow | 255, 255, 255 | 1.000 | 1.000 | 69 | `$` |
 | sky near horizon | 157, 191, 220 | 0.729 | 0.796 | 55 | `b` |
-| dirt in shadow | 39, 28, 18 | 0.116 | 0.212 | 15 | `~` |
+| dirt in shadow | 47, 33, 20 | 0.137 | 0.240 | 17 | `_` |
 
 The glyph supplies **shape and brightness**; colour is applied separately, so a
 `z` can be grass green or mossy stone and still read as a mid-tone.
@@ -191,9 +195,9 @@ Coloured modes paint each glyph with the surface colour, lifted slightly so it
 stays legible on the dark background:
 
 ```python
-R = min(255, int(R * 1.10 + 8))
-G = min(255, int(G * 1.10 + 8))
-B = min(255, int(B * 1.10 + 8))
+R = min(255, int(R * 1.14 + 10))
+G = min(255, int(G * 1.14 + 10))
+B = min(255, int(B * 1.14 + 10))
 ```
 
 Monochrome mode instead derives one grey from the same tone:
@@ -258,9 +262,9 @@ def shade_to_cell(r, g, b):
     tone = lum ** 0.72
     idx  = int(tone * (len(RAMP) - 1) + 0.5)
     glyph = RAMP[idx]
-    fg = (min(255, int(r * 1.10 + 8)),
-          min(255, int(g * 1.10 + 8)),
-          min(255, int(b * 1.10 + 8)))
+    fg = (min(255, int(r * 1.14 + 10)),
+          min(255, int(g * 1.14 + 10)),
+          min(255, int(b * 1.14 + 10)))
     return glyph, fg
 ```
 
@@ -276,7 +280,7 @@ animation, ANSI batching — exists to feed plausible RGB into those four lines.
 - **A large ramp.** 70 glyphs avoid the banding of the usual 10-character ramps
   while still mapping to terminal-safe printable ASCII.
 - **Exaggerated face light.** Cube edges survive quantisation because adjacent
-  faces differ by 20–60% brightness before the ramp.
+  faces differ by up to 56% brightness before the ramp.
 - **Tone lift.** The `** 0.72` curve spends more glyphs on the mid-tones that
   dominate grass, stone, leaves and water.
 - **Deterministic grain.** Texture is a hash of position, not a texture lookup,
@@ -290,7 +294,7 @@ animation, ANSI batching — exists to feed plausible RGB into those four lines.
 | --- | --- | --- |
 | ramp string | `voxelterm/ansi.py` | glyph density and artistic feel |
 | tone exponent | `ansi.py` (`lum ** 0.72`) | mid-tone contrast |
-| colour lift | `ansi.py` (`* 1.10 + 8`) | glyph legibility on dark backgrounds |
+| colour lift | `ansi.py` (`* 1.14 + 10`) | glyph legibility on dark backgrounds |
 | `FACE_LIGHT` | `voxelterm/blocks.py` | cube readability |
 | `FOG_DISTANCE` | `voxelterm/raycaster.py` | depth falloff |
 | `_SKY_*` | `voxelterm/raycaster.py` | horizon palette and fog colour |

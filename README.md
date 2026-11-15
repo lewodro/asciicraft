@@ -142,7 +142,7 @@ which is converted to a glyph plus a foreground colour:
 lum  = (0.2126*R + 0.7152*G + 0.0722*B) / 255   # Rec. 709 luminance
 tone = lum ** 0.72                              # lift the mid-tones
 idx  = int(tone * (len(RAMP) - 1) + 0.5)        # pick a glyph
-fg   = (min(255, int(R*1.10 + 8)), ...)         # lift for legibility
+fg   = (min(255, int(R*1.14 + 10)), ...)        # lift for legibility
 ```
 
 The ramp has 70 glyphs, from space to `$`:

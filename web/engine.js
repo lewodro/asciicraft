@@ -965,9 +965,9 @@
       r = ((rgb >> 16) & 255);
       g = ((rgb >> 8) & 255);
       b = (rgb & 255);
-      r = Math.min(255, Math.floor(r * 1.10 + 8));
-      g = Math.min(255, Math.floor(g * 1.10 + 8));
-      b = Math.min(255, Math.floor(b * 1.10 + 8));
+      r = Math.min(255, Math.floor(r * 1.14 + 10));
+      g = Math.min(255, Math.floor(g * 1.14 + 10));
+      b = Math.min(255, Math.floor(b * 1.14 + 10));
     }
     return [ch, r, g, b];
   }

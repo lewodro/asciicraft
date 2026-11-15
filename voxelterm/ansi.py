@@ -90,9 +90,9 @@ def encode_frame(pixels: list[int], width: int, pixel_height: int, mode: str,
                     g = (rgb >> 8) & 255
                     b = rgb & 255
                     # A small lift keeps coloured glyphs legible on black.
-                    r = min(255, int(r * 1.10 + 8))
-                    g = min(255, int(g * 1.10 + 8))
-                    b = min(255, int(b * 1.10 + 8))
+                    r = min(255, int(r * 1.14 + 10))
+                    g = min(255, int(g * 1.14 + 10))
+                    b = min(255, int(b * 1.14 + 10))
                     packed = (r << 16) | (g << 8) | b
                     if packed != last_fg:
                         parts.append(_fg(packed))
