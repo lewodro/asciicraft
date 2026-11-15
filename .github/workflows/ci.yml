@@ -21,6 +21,9 @@ jobs:
       - name: Byte-compile
         run: python3 -m py_compile main.py voxelterm/*.py tools/*.py
 
+      - name: Check repository files and links
+        run: python3 tools/check_repo.py
+
       - name: Render a snapshot
         run: python3 main.py --small --snapshot frame.ansi --width 80 --height 24
 
