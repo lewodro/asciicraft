@@ -1,0 +1,61 @@
+name: Bug report
+description: Something broke while generating, rendering, or moving through a world.
+title: "[bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A seed and a command are worth more than a paragraph.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+      placeholder: The view opens but the HUD says the wrong mode...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact command and any keys you pressed.
+      placeholder: |
+        ./run.sh --seed 1337 --mode ascii-color
+        Press M twice
+        ...
+    validations:
+      required: true
+  - type: input
+    id: seed
+    attributes:
+      label: World seed
+      placeholder: "1337"
+  - type: dropdown
+    id: target
+    attributes:
+      label: Where did it happen?
+      options:
+        - Terminal build
+        - Browser build
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, terminal/browser, Python version, and terminal size if relevant.
+      placeholder: macOS 15, iTerm2, Python 3.12, 160x48
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshot
+      description: Paste a traceback or attach a screenshot. Do not paste a whole ANSI frame.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I tried the same command with `--small`.
+        - label: I searched existing issues.

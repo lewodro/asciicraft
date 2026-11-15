@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest a render mode, control, performance idea, or port.
+title: "[idea] "
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What would you like to see?
+      placeholder: A depth-only ASCII mode, or a --record flag for GIFs...
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it fits ASCIICRAFT
+      description: How does it improve the art, the speed, or the accessibility?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing flags, other projects, or a simpler version.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Rendering / ASCII pipeline
+        - World generation
+        - Performance
+        - Terminal controls
+        - Browser build
+        - Documentation
+        - Packaging
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: I understand the runtime is standard-library only.
+        - label: I can help test this.
