@@ -22,6 +22,10 @@ MAX_DISTANCE = 190.0
 _SKY_ZENITH = (31, 73, 151)
 _SKY_HORIZON = (157, 191, 220)
 _SKY_GROUND = (76, 91, 103)
+# Final grade applied to lit surfaces, before fog. Exposure lifts the whole
+# palette; saturation keeps grass, water and leaves vivid instead of pastel.
+_EXPOSURE = 1.18
+_SATURATION = 1.12
 _SUN_DIR = (-0.43, 0.57, 0.70)
 _SUN_LEN = math.sqrt(sum(c * c for c in _SUN_DIR))
 _SUN_DIR = tuple(c / _SUN_LEN for c in _SUN_DIR)
@@ -610,6 +614,12 @@ class RaycastRenderer:
             r = color[0] * light
             g = color[1] * light
             bl = color[2] * light
+
+            # Stay away from the material's own luminance, then expose.
+            lum = 0.2126 * r + 0.7152 * g + 0.0722 * bl
+            r = (lum + (r - lum) * _SATURATION) * _EXPOSURE
+            g = (lum + (g - lum) * _SATURATION) * _EXPOSURE
+            bl = (lum + (bl - lum) * _SATURATION) * _EXPOSURE
 
             fog = 1.0 - math.exp(-(dist / fog_dist) ** 2)
             if fog > 0.0:

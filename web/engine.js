@@ -18,10 +18,12 @@
   [GRASS, DIRT, STONE, WOOD, SAND, SNOW].forEach(function (b) { OCCLUDERS[b] = 1; });
 
   var FACE_LIGHT = {
-    "0,1,0": 1.00, "0,-1,0": 0.40,
-    "1,0,0": 0.62, "-1,0,0": 0.58,
-    "0,0,1": 0.82, "0,0,-1": 0.76
+    "0,1,0": 1.00, "0,-1,0": 0.44,
+    "1,0,0": 0.70, "-1,0,0": 0.65,
+    "0,0,1": 0.88, "0,0,-1": 0.81
   };
+  // Final grade applied to lit surfaces, before fog. Mirrors raycaster.py.
+  var GRADE_EXPOSURE = 1.18, GRADE_SATURATION = 1.12;
 
   // Same density ramp as voxelterm/ansi.py.
   var ASCII_RAMP =
@@ -926,6 +928,11 @@
       if (light === undefined) light = 0.8;
       if (block !== WATER) light *= this._ao(x, y, z, nx, ny, nz, u, v);
       r *= light; g *= light; bl *= light;
+
+      var lum = 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+      r = (lum + (r - lum) * GRADE_SATURATION) * GRADE_EXPOSURE;
+      g = (lum + (g - lum) * GRADE_SATURATION) * GRADE_EXPOSURE;
+      bl = (lum + (bl - lum) * GRADE_SATURATION) * GRADE_EXPOSURE;
 
       var fog = 1 - Math.exp(-Math.pow(dist / FOG_DISTANCE, 2));
       if (fog > 0) {

@@ -27,13 +27,15 @@ BLOCK_NAMES = {
 
 # Lighting is deliberately stylised, not physically correct.  The strong
 # separation between the six face directions is what makes cubes read as cubes.
+# Side and underside values stay well below the sunlit top, but the palette is
+# lifted enough that shaded faces keep their material colour.
 FACE_LIGHT = {
     (0, 1, 0): 1.00,
-    (0, -1, 0): 0.40,
-    (1, 0, 0): 0.62,
-    (-1, 0, 0): 0.58,
-    (0, 0, 1): 0.82,
-    (0, 0, -1): 0.76,
+    (0, -1, 0): 0.44,
+    (1, 0, 0): 0.70,
+    (-1, 0, 0): 0.65,
+    (0, 0, 1): 0.88,
+    (0, 0, -1): 0.81,
 }
 
 # Blocks that fully occlude a neighbouring face.
