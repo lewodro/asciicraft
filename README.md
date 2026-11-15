@@ -77,7 +77,8 @@ install, no build step. To run it locally:
 ```
 
 You can also open `web/index.html` directly from disk. Windows users can run
-`serve.bat`.
+`serve.bat`. The intro card stays up long enough to read the controls before the
+world starts moving.
 
 ## Screenshots
 

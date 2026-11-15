@@ -6,6 +6,18 @@ All notable changes to ASCIICRAFT are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The browser intro card now holds for at least 2.2 seconds, even though world
+  generation finishes in a fraction of that time.
+
+### Changed
+
+- Brighter, more saturated in-game colours: raised face-light levels, an
+  exposure/vibrance grade before fog, and a stronger ANSI glyph lift. The new
+  palette applies to the terminal and browser builds in every render mode.
+- Regenerated the README screenshots with the new palette.
+
 ## [1.0.0] - 2026-11-14
 
 The first public release: a zero-dependency terminal renderer and a matching
