@@ -18,6 +18,17 @@ python3 -m http.server 8000
 # http://localhost:8000/web/
 ```
 
+## Upload
+
+Copy both files to any static host, keeping them in the same directory:
+
+- GitHub Pages: commit this folder, enable Pages on the branch
+- Netlify / Vercel / Cloudflare Pages: publish the folder as-is
+- S3 / nginx / shared hosting: upload both files
+
+No build step, no server code, no external requests. The page works from
+`file://` too.
+
 ## Links and options
 
 ```
