@@ -317,22 +317,23 @@
       }
     }
 
-    // 2. Caves and caverns (2-voxel lattice, 2x2x2 carve).
-    for (z = 2; z < depth - 3; z += 2) {
-      for (x = 2; x < width - 3; x += 2) {
+    // 2. Caves and caverns (3-voxel lattice, 3x3x3 carve).
+    var caveStep = 3, reach = caveStep - 1;
+    for (z = 2; z < depth - 3; z += caveStep) {
+      for (x = 2; x < width - 3; x += caveStep) {
         var hh = heights[x + width * z];
-        var upper = Math.min(hh - 2, height - 3);
-        for (y = 3; y <= upper; y += 2) {
+        var upper = Math.min(hh - 2, height - 2 - reach);
+        for (y = 3; y <= upper; y += caveStep) {
           var c1 = noise.noise3(x * 0.055, y * 0.075, z * 0.055);
           var c2 = noise.noise3(x * 0.105 + 31.0, y * 0.135 + 17.0, z * 0.105 - 19.0);
           var cavern = noise.noise3(x * 0.022 + 91.0, y * 0.041, z * 0.022 - 45.0);
           if (!(c1 * c1 + c2 * c2 * 1.35 < 0.0038 || cavern > 0.45)) continue;
-          for (var dy = 0; dy < 2; dy++) {
+          for (var dy = 0; dy < caveStep; dy++) {
             var yy = y + dy;
             if (yy > Math.min(hh - 2, height - 2)) continue;
-            for (var dz = 0; dz < 2; dz++) {
+            for (var dz = 0; dz < caveStep; dz++) {
               var zz = z + dz;
-              for (var dx = 0; dx < 2; dx++) {
+              for (var dx = 0; dx < caveStep; dx++) {
                 var xx = x + dx;
                 i = xx + width * (zz + depth * yy);
                 if (grid[i] !== 0 && grid[i] !== WATER) grid[i] = AIR;

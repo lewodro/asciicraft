@@ -77,6 +77,10 @@ def main() -> int:
 
     cells = args.width * renderer.pixel_height
     print(f"world       {dims[0]} x {dims[1]} x {dims[2]} in {gen_ms:.0f} ms")
+    if world.timings:
+        stages = "  ".join(f"{name}={value * 1000:.0f}ms"
+                           for name, value in world.timings.items())
+        print(f"  stages    {stages}")
     print(f"grid        {cells} pixels, {args.mode}")
     print(f"raycast     {_mean_ms(render_ms):7.2f} ms/frame")
     print(f"ansi encode {_mean_ms(encode_ms):7.2f} ms/frame")

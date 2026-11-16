@@ -28,7 +28,7 @@ class World:
     __slots__ = (
         "seed", "width", "depth", "height", "sea_level",
         "grid", "height_map", "chunks", "spawn", "generation_time",
-        "macro", "macro_dims", "macro_size", "macro_top",
+        "macro", "macro_dims", "macro_size", "macro_top", "timings",
     )
 
     def __init__(self, seed: int,
@@ -49,6 +49,7 @@ class World:
         self.macro_dims = (1, 1, 1)
         self.macro_size = MACRO
         self.macro_top = bytearray()
+        self.timings: dict[str, float] = {}
 
     # ------------------------------------------------------------------ access
     def index(self, x: int, y: int, z: int) -> int:
@@ -80,6 +81,8 @@ class World:
     def generate(self) -> "World":
         import time
         started = time.perf_counter()
+        mark = started
+        self.timings = {}
         noise = PerlinNoise(self.seed)
         rng = random.Random(self.seed ^ 0x9E3779B9)
         self.grid = bytearray(self.width * self.depth * self.height)
@@ -135,17 +138,22 @@ class World:
                     for y in range(h + 1, water_top + 1):
                         grid[x + width * (z + depth * y)] = blocks.WATER
 
+        self.timings["height"] = time.perf_counter() - mark
+        mark = time.perf_counter()
+
         # 2. Carve 3-D tunnels and occasional caverns.  Two intersecting
         #    isosurfaces produce connected worm-like caves rather than noisy
         #    swiss cheese.  A lower-frequency field adds room-sized pockets.
-        #    Sampling on a 2-voxel lattice and carving 2x2x2 cells cuts the
-        #    noise cost by roughly 8x; at terminal resolution the caves still
-        #    read as organic tunnels.
-        for z in range(2, depth - 3, 2):
-            for x in range(2, width - 3, 2):
+        #    Sampling on a 3-voxel lattice and carving 3x3x3 cells cuts the
+        #    noise cost by roughly 4x; the fields are smooth enough that the
+        #    carved volume stays almost identical at terminal resolution.
+        cave_step = 3
+        reach = cave_step - 1
+        for z in range(2, depth - 3, cave_step):
+            for x in range(2, width - 3, cave_step):
                 h = heights[x + width * z]
-                upper = min(h - 2, height - 3)
-                for y in range(3, upper + 1, 2):
+                upper = min(h - 2, height - 2 - reach)
+                for y in range(3, upper + 1, cave_step):
                     c1 = noise.noise3(x * 0.055, y * 0.075, z * 0.055)
                     c2 = noise.noise3(x * 0.105 + 31.0, y * 0.135 + 17.0,
                                       z * 0.105 - 19.0)
@@ -153,17 +161,20 @@ class World:
                                           z * 0.022 - 45.0)
                     if not (c1 * c1 + c2 * c2 * 1.35 < 0.0038 or cavern > 0.45):
                         continue
-                    for dy in (0, 1):
+                    for dy in range(cave_step):
                         yy = y + dy
                         if yy > min(h - 2, height - 2):
                             continue
-                        for dz in (0, 1):
+                        for dz in range(cave_step):
                             zz = z + dz
-                            for dx in (0, 1):
+                            for dx in range(cave_step):
                                 xx = x + dx
                                 idx = xx + width * (zz + depth * yy)
                                 if grid[idx] != 0 and grid[idx] != blocks.WATER:
                                     grid[idx] = blocks.AIR
+
+        self.timings["caves"] = time.perf_counter() - mark
+        mark = time.perf_counter()
 
         # 3. Trees.  A jittered lattice gives pleasing spacing without an
         #    expensive Poisson-disc pass.
@@ -196,12 +207,22 @@ class World:
                 occupied.add(key)
                 self._grow_tree(x, h, z, rng)
 
+        self.timings["trees"] = time.perf_counter() - mark
+        mark = time.perf_counter()
+
         # 4. Split the dense mirror into conventional chunks and build the
         #    coarse occupancy pyramid used to skip empty air in the DDA.
         self._build_chunks()
+        self.timings["chunks"] = time.perf_counter() - mark
+        mark = time.perf_counter()
         self._build_macro()
+        self.timings["macro"] = time.perf_counter() - mark
+        mark = time.perf_counter()
         self._build_macro_top()
+        self.timings["macro_top"] = time.perf_counter() - mark
+        mark = time.perf_counter()
         self.spawn = self._choose_spawn()
+        self.timings["spawn"] = time.perf_counter() - mark
         self.generation_time = time.perf_counter() - started
         return self
 
