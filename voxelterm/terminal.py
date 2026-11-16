@@ -54,8 +54,14 @@ class TerminalSession:
         return False
 
     def write(self, text: str) -> None:
-        sys.stdout.write(text)
-        sys.stdout.flush()
+        # Bypass the text wrapper so each frame is encoded and written once.
+        buffer = getattr(sys.stdout, "buffer", None)
+        if buffer is not None:
+            buffer.write(text.encode("utf-8", "replace"))
+            buffer.flush()
+        else:  # pragma: no cover - unusual stdout replacement
+            sys.stdout.write(text)
+            sys.stdout.flush()
 
     def clear(self) -> None:
         self.write(CLEAR)

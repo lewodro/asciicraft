@@ -14,13 +14,31 @@ _BG = "\x1b[48;2;6;9;14m"
 _HUD_BG = "\x1b[48;2;18;24;32m\x1b[38;2;155;185;210m"
 _RESET = "\x1b[0m"
 
+# Escape strings repeat heavily across a frame.  Cache the packed RGB -> token
+# mapping so the encoder does not rebuild the same f-string thousands of times.
+_FG_CACHE: dict[int, str] = {}
+_BG_CACHE: dict[int, str] = {}
+_CACHE_LIMIT = 32768
+
 
 def _fg(rgb: int) -> str:
-    return f"\x1b[38;2;{(rgb >> 16) & 255};{(rgb >> 8) & 255};{rgb & 255}m"
+    token = _FG_CACHE.get(rgb)
+    if token is None:
+        token = f"\x1b[38;2;{(rgb >> 16) & 255};{(rgb >> 8) & 255};{rgb & 255}m"
+        if len(_FG_CACHE) >= _CACHE_LIMIT:
+            _FG_CACHE.clear()
+        _FG_CACHE[rgb] = token
+    return token
 
 
 def _bg(rgb: int) -> str:
-    return f"\x1b[48;2;{(rgb >> 16) & 255};{(rgb >> 8) & 255};{rgb & 255}m"
+    token = _BG_CACHE.get(rgb)
+    if token is None:
+        token = f"\x1b[48;2;{(rgb >> 16) & 255};{(rgb >> 8) & 255};{rgb & 255}m"
+        if len(_BG_CACHE) >= _CACHE_LIMIT:
+            _BG_CACHE.clear()
+        _BG_CACHE[rgb] = token
+    return token
 
 
 def _luminance(rgb: int) -> float:
@@ -63,39 +81,50 @@ def encode_frame(pixels: list[int], width: int, pixel_height: int, mode: str,
         cell_rows = pixel_height
         mono = mode == MODE_ASCII_MONO
         mono_cache: dict[int, str] = {}
+        fg_cache = _FG_CACHE
+        # The background is constant for the whole ASCII frame, so set it
+        # once.  Foreground runs also persist across rows; tracking one
+        # `last_fg` avoids resetting and re-emitting the same colour at every
+        # line boundary.
+        parts.append(_RESET)
+        parts.append(_BG)
+        last_fg = -1
         for row in range(cell_rows):
             if row:
                 parts.append("\r\n")
-            parts.append(_RESET)
-            parts.append(_BG)
             base = row * width
-            last_fg = -1
             for x in range(width):
                 rgb = pixels[base + x]
-                lum = _luminance(rgb) ** 0.72
-                ch = ASCII_RAMP[int(lum * ramp_last + 0.5)]
+                r = (rgb >> 16) & 255
+                g = (rgb >> 8) & 255
+                b = rgb & 255
+                tone = ((0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0) ** 0.72
+                ch = ASCII_RAMP[int(tone * ramp_last + 0.5)]
                 if mono:
-                    v = int(58 + 190 * (lum ** 0.9))
+                    v = int(58 + 190 * (tone ** 0.9))
                     if v > 255:
                         v = 255
-                    fg = mono_cache.get(v)
-                    if fg is None:
-                        fg = f"\x1b[38;2;{v};{v};{v}m"
-                        mono_cache[v] = fg
                     if v != last_fg:
-                        parts.append(fg)
+                        token = mono_cache.get(v)
+                        if token is None:
+                            token = f"\x1b[38;2;{v};{v};{v}m"
+                            mono_cache[v] = token
+                        parts.append(token)
                         last_fg = v
                 else:
-                    r = (rgb >> 16) & 255
-                    g = (rgb >> 8) & 255
-                    b = rgb & 255
                     # A small lift keeps coloured glyphs legible on black.
                     r = min(255, int(r * 1.14 + 10))
                     g = min(255, int(g * 1.14 + 10))
                     b = min(255, int(b * 1.14 + 10))
                     packed = (r << 16) | (g << 8) | b
                     if packed != last_fg:
-                        parts.append(_fg(packed))
+                        token = fg_cache.get(packed)
+                        if token is None:
+                            token = f"\x1b[38;2;{r};{g};{b}m"
+                            if len(fg_cache) >= _CACHE_LIMIT:
+                                fg_cache.clear()
+                            fg_cache[packed] = token
+                        parts.append(token)
                         last_fg = packed
                 parts.append(ch)
 
