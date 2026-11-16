@@ -96,6 +96,10 @@ def main() -> int:
         world_failures.append("voxel grid checksum differs")
     if js["gridLen"] != len(world.grid):
         world_failures.append("grid length differs")
+    if js["biomeHash"] != fnv_bytes(world.biomes):
+        world_failures.append("biome map checksum differs")
+    if js["biomeLen"] != len(world.biomes):
+        world_failures.append("biome map length differs")
     failures.extend(world_failures)
     spawn = tuple(round(v, 6) for v in js["spawn"])
     py_spawn = tuple(round(v, 6) for v in world.spawn)

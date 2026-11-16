@@ -33,6 +33,7 @@ function fnvInts(ints, h) {
 
 var heightHash = fnvInts(world.heightMap, 2166136261);
 var gridHash = fnvBytes(world.grid, 2166136261);
+var biomeHash = fnvBytes(world.biomes, 2166136261);
 
 // A small ASCII frame proof: 60x18 cells using the same style mapping.
 var cam = new VT.Camera(world.spawn[0], world.spawn[1], world.spawn[2],
@@ -55,6 +56,8 @@ print(JSON.stringify({
   heightHash: heightHash,
   gridHash: gridHash,
   gridLen: world.grid.length,
+  biomeHash: biomeHash,
+  biomeLen: world.biomes.length,
   charKinds: Object.keys(counts).length,
   topChars: Object.keys(counts).sort(function (a, b) {
     return counts[b] - counts[a];

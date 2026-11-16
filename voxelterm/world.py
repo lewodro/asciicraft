@@ -15,6 +15,16 @@ WORLD_DEPTH = 256
 WORLD_HEIGHT = 80
 SEA_LEVEL = 29
 
+# Surface biomes.  The climate fields are low-frequency, so they are sampled
+# on a coarse lattice and stamped into the per-column map; the block edges are
+# well below one terminal cell at play resolution.
+BIOME_PLAINS = 0
+BIOME_FOREST = 1
+BIOME_SAVANNA = 2
+BIOME_DESERT = 3
+BIOME_NAMES = ("plains", "forest", "savanna", "desert")
+BIOME_STRIDE = 4
+
 
 class World:
     """A finite, deterministic Perlin-noise voxel island.
@@ -29,6 +39,7 @@ class World:
         "seed", "width", "depth", "height", "sea_level",
         "grid", "height_map", "chunks", "spawn", "generation_time",
         "macro", "macro_dims", "macro_size", "macro_top", "timings",
+        "biomes",
     )
 
     def __init__(self, seed: int,
@@ -50,10 +61,19 @@ class World:
         self.macro_size = MACRO
         self.macro_top = bytearray()
         self.timings: dict[str, float] = {}
+        self.biomes = bytearray(width * depth)
 
     # ------------------------------------------------------------------ access
     def index(self, x: int, y: int, z: int) -> int:
         return x + self.width * (z + self.depth * y)
+
+    def biome_at(self, x: int, z: int) -> int:
+        if 0 <= x < self.width and 0 <= z < self.depth:
+            return self.biomes[x + self.width * z]
+        return BIOME_PLAINS
+
+    def biome_name(self, x: int, z: int) -> str:
+        return BIOME_NAMES[self.biome_at(int(x), int(z))]
 
     def in_bounds(self, x: int, y: int, z: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height and 0 <= z < self.depth
@@ -95,6 +115,34 @@ class World:
         grid = self.grid
         heights = self.height_map
 
+        # 0. Climate map.  Heat and moisture are independent low-frequency
+        #    fields; their combination picks the surface material and the tree
+        #    density later on.  Sampling every BIOME_STRIDE columns keeps this
+        #    stage under a few milliseconds.
+        biomes = self.biomes
+        stride = BIOME_STRIDE
+        for bz in range(0, depth, stride):
+            for bx in range(0, width, stride):
+                heat = noise.noise2(bx * 0.0046 + 61.0, bz * 0.0046 - 37.0)
+                wet = noise.noise2(bx * 0.0063 - 23.0, bz * 0.0063 + 49.0)
+                if heat > 0.20 and wet < 0.10:
+                    biome = BIOME_DESERT
+                elif wet > 0.20:
+                    biome = BIOME_FOREST
+                elif heat > 0.10:
+                    biome = BIOME_SAVANNA
+                else:
+                    biome = BIOME_PLAINS
+                z_end = min(bz + stride, depth)
+                x_end = min(bx + stride, width)
+                for zz in range(bz, z_end):
+                    row = width * zz
+                    for xx in range(bx, x_end):
+                        biomes[row + xx] = biome
+
+        self.timings["biome"] = time.perf_counter() - mark
+        mark = time.perf_counter()
+
         # 1. Height field: domain-warped continents, rolling hills and a broad
         #    ridged mountain mask.  This is intentionally more interesting than
         #    a single fBm octave stack.
@@ -116,7 +164,7 @@ class World:
                 top_block = blocks.GRASS
                 if h >= 50:
                     top_block = blocks.SNOW
-                elif h <= sea + 1:
+                elif h <= sea + 1 or biomes[x + width * z] == BIOME_DESERT:
                     top_block = blocks.SAND
 
                 for y in range(0, h + 1):
@@ -181,11 +229,21 @@ class World:
         occupied: set[tuple[int, int]] = set()
         for gx in range(4, width - 4, 5):
             for gz in range(4, depth - 4, 5):
-                if rng.random() > 0.30:
-                    continue
                 x = gx + rng.randrange(-1, 2)
                 z = gz + rng.randrange(-1, 2)
                 if not (3 <= x < width - 3 and 3 <= z < depth - 3):
+                    continue
+                # Forests are dense, savanna is sparse and deserts are bare.
+                biome = biomes[x + width * z]
+                if biome == BIOME_FOREST:
+                    density = 0.74
+                elif biome == BIOME_SAVANNA:
+                    density = 0.14
+                elif biome == BIOME_DESERT:
+                    density = 0.02
+                else:
+                    density = 0.30
+                if rng.random() > density:
                     continue
                 h = heights[x + width * z]
                 if h <= sea + 1 or h >= height - 12:

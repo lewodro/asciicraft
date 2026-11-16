@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 from . import blocks
+from .world import BIOME_DESERT, BIOME_FOREST, BIOME_SAVANNA
 
 MODE_HALF = "half"
 MODE_ASCII_COLOR = "ascii-color"
@@ -203,6 +204,18 @@ class RaycastRenderer:
                     base = (base[0] + (grain - 0.5) * 20,
                             base[1] + (grain - 0.5) * 16,
                             base[2] + (grain - 0.5) * 12)
+            # Biome tint: forests read deeper and cooler, while savanna and
+            # desert grass dries toward straw.  The pattern comes from the
+            # low-frequency climate map, not per-voxel noise.
+            biome = self.world.biomes[bx + self.world.width * bz]
+            if biome == BIOME_FOREST:
+                base = (base[0] * 0.84, base[1] * 0.96, base[2] * 0.80)
+            elif biome == BIOME_SAVANNA:
+                base = (min(255.0, base[0] * 1.12), base[1] * 1.02,
+                        base[2] * 0.68)
+            elif biome == BIOME_DESERT:
+                base = (min(255.0, base[0] * 1.10), base[1] * 0.99,
+                        base[2] * 0.64)
         elif block == blocks.DIRT:
             base = (104, 76, 50)
             base = (base[0] + (grain - 0.5) * 25,

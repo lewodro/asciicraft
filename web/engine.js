@@ -14,6 +14,11 @@
   var AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WATER = 4,
       WOOD = 5, LEAVES = 6, SAND = 7, SNOW = 8;
 
+  // Surface biomes; mirrors world.py.
+  var BIOME_PLAINS = 0, BIOME_FOREST = 1, BIOME_SAVANNA = 2, BIOME_DESERT = 3;
+  var BIOME_NAMES = ["plains", "forest", "savanna", "desert"];
+  var BIOME_STRIDE = 4;
+
   var OCCLUDERS = new Uint8Array(9);
   [GRASS, DIRT, STONE, WOOD, SAND, SNOW].forEach(function (b) { OCCLUDERS[b] = 1; });
 
@@ -218,6 +223,7 @@
     this.seaLevel = SEA_LEVEL;
     this.grid = new Uint8Array(this.width * this.depth * this.height);
     this.heightMap = new Int16Array(this.width * this.depth);
+    this.biomes = new Uint8Array(this.width * this.depth);
     this.spawn = [this.width * 0.5, this.height * 0.72, this.depth * 0.5, 0, 0];
     this.macro = new Uint8Array(0);
     this.macroDims = [1, 1, 1];
@@ -271,6 +277,15 @@
     }
     return 0;
   };
+  World.prototype.biomeAt = function (x, z) {
+    if (x >= 0 && x < this.width && z >= 0 && z < this.depth) {
+      return this.biomes[x + this.width * z];
+    }
+    return BIOME_PLAINS;
+  };
+  World.prototype.biomeName = function (x, z) {
+    return BIOME_NAMES[this.biomeAt(Math.floor(x), Math.floor(z))];
+  };
 
   World.prototype.generate = function () {
     var started = (typeof performance !== "undefined") ? performance.now() : Date.now();
@@ -279,7 +294,28 @@
     var noise = new PerlinNoise(this.seed);
     var rng = new PyRandom(this.seed ^ 0x9E3779B9);
     var grid = this.grid, heights = this.heightMap;
+    var biomes = this.biomes;
     var x, y, z, i;
+
+    // 0. Climate map (heat x moisture), stamped on a coarse lattice.
+    var stride = BIOME_STRIDE;
+    for (var bz = 0; bz < depth; bz += stride) {
+      for (var bx = 0; bx < width; bx += stride) {
+        var heat = noise.noise2(bx * 0.0046 + 61.0, bz * 0.0046 - 37.0);
+        var wet = noise.noise2(bx * 0.0063 - 23.0, bz * 0.0063 + 49.0);
+        var biome;
+        if (heat > 0.20 && wet < 0.10) biome = BIOME_DESERT;
+        else if (wet > 0.20) biome = BIOME_FOREST;
+        else if (heat > 0.10) biome = BIOME_SAVANNA;
+        else biome = BIOME_PLAINS;
+        var zEnd = Math.min(bz + stride, depth);
+        var xEnd = Math.min(bx + stride, width);
+        for (var zz = bz; zz < zEnd; zz++) {
+          var row = width * zz;
+          for (var xx = bx; xx < xEnd; xx++) biomes[row + xx] = biome;
+        }
+      }
+    }
 
     // 1. Height field.
     for (z = 0; z < depth; z++) {
@@ -298,7 +334,7 @@
 
         var topBlock = GRASS;
         if (h >= 50) topBlock = SNOW;
-        else if (h <= sea + 1) topBlock = SAND;
+        else if (h <= sea + 1 || biomes[x + width * z] === BIOME_DESERT) topBlock = SAND;
 
         for (y = 0; y <= h; y++) {
           var block;
@@ -348,10 +384,16 @@
     var occupied = new Set();
     for (var gx = 4; gx < width - 4; gx += 5) {
       for (var gz = 4; gz < depth - 4; gz += 5) {
-        if (rng.random() > 0.30) continue;
         x = gx + rng.randrange(-1, 2);
         z = gz + rng.randrange(-1, 2);
         if (!(x >= 3 && x < width - 3 && z >= 3 && z < depth - 3)) continue;
+        var biome = biomes[x + width * z];
+        var density;
+        if (biome === BIOME_FOREST) density = 0.74;
+        else if (biome === BIOME_SAVANNA) density = 0.14;
+        else if (biome === BIOME_DESERT) density = 0.02;
+        else density = 0.30;
+        if (rng.random() > density) continue;
         var gh = heights[x + width * z];
         if (gh <= sea + 1 || gh >= height - 12) continue;
         if (grid[x + width * (z + depth * gh)] !== GRASS) continue;
@@ -692,6 +734,15 @@
           r = r + (67 - r) * 0.2; g = g + (108 - g) * 0.2; b = b + (48 - b) * 0.2;
           r += (grain - 0.5) * 20; g += (grain - 0.5) * 16; b += (grain - 0.5) * 12;
         }
+      }
+      // Biome tint, mirrored from raycaster.py.
+      var biome = this.world.biomes[bx + this.world.width * bz];
+      if (biome === BIOME_FOREST) {
+        r *= 0.84; g *= 0.96; b *= 0.80;
+      } else if (biome === BIOME_SAVANNA) {
+        r = Math.min(255, r * 1.12); g *= 1.02; b *= 0.68;
+      } else if (biome === BIOME_DESERT) {
+        r = Math.min(255, r * 1.10); g *= 0.99; b *= 0.64;
       }
     } else if (block === DIRT) {
       r = 104; g = 76; b = 50;
