@@ -37,6 +37,7 @@ REQUIRED = (
     "docs/launch-post.md",
     "tools/check_repo.py",
     "tools/screenshot.py",
+    "tools/profile_render.py",
     "assets/README.md",
     "assets/asciicraft-highlands.png",
     "assets/asciicraft-valley.png",

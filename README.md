@@ -254,7 +254,7 @@ asciicraft/
 │   ├── parallel.py         fork-based scanline bands
 │   └── app.py              loop, layout, modes, snapshot/benchmark
 ├── web/                    dependency-free browser port
-├── tools/                  preview, PTY, parity, DOM, repo and screenshot tools
+├── tools/                  preview, PTY, parity, DOM, profiling and screenshot tools
 ├── assets/                 README screenshots
 ├── docs/
 │   ├── ascii-rendering.md  the full RGB → glyph → ANSI pipeline
@@ -268,6 +268,7 @@ asciicraft/
 ```bash
 python3 -m py_compile main.py voxelterm/*.py tools/*.py
 python3 tools/check_repo.py                                # required files + local links
+python3 tools/profile_render.py --small --frames 5         # generation/render/encode timings
 python3 tools/pty_test.py --small --width 70 --height 18   # input/quit/mode test
 python3 tools/web_parity.py                                # Python ↔ JS parity
 ```
