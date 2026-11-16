@@ -495,6 +495,7 @@
     this.yaw = yaw || 0; this.pitch = pitch || 0;
     this.fov = (fovDegrees || 76) * Math.PI / 180;
     this.speed = 3.4;
+    this.vx = 0; this.vy = 0; this.vz = 0;
     this._basis = new Float64Array(9);
   }
   Camera.prototype.basis = function () {
@@ -507,16 +508,29 @@
     return b;
   };
   Camera.prototype.move = function (dt, forward, strafe, vertical, world, sprint) {
-    var mag = Math.hypot(forward, strafe);
-    if (mag > 1) { forward /= mag; strafe /= mag; }
+    var mag = Math.sqrt(forward * forward + strafe * strafe + vertical * vertical);
+    if (mag > 1) { forward /= mag; strafe /= mag; vertical /= mag; }
     var speed = this.speed * (sprint ? 1.8 : 1.0);
     var cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
-    this.x += (sy * forward + cy * strafe) * speed * dt;
-    this.z += (cy * forward - sy * strafe) * speed * dt;
-    this.y += vertical * speed * dt;
-    this.x = Math.max(1.2, Math.min(world.width - 1.2, this.x));
-    this.z = Math.max(1.2, Math.min(world.depth - 1.2, this.z));
-    this.y = Math.max(1.2, Math.min(world.height - 1.2, this.y));
+    var targetX = (sy * forward + cy * strafe) * speed;
+    var targetZ = (cy * forward - sy * strafe) * speed;
+    var targetY = vertical * speed;
+
+    var response = 1 - Math.exp(-(sprint ? 16 : 12) * dt);
+    this.vx += (targetX - this.vx) * response;
+    this.vy += (targetY - this.vy) * response;
+    this.vz += (targetZ - this.vz) * response;
+
+    this.x += this.vx * dt;
+    this.z += this.vz * dt;
+    this.y += this.vy * dt;
+
+    if (this.x < 1.2) { this.x = 1.2; this.vx = 0; }
+    else if (this.x > world.width - 1.2) { this.x = world.width - 1.2; this.vx = 0; }
+    if (this.z < 1.2) { this.z = 1.2; this.vz = 0; }
+    else if (this.z > world.depth - 1.2) { this.z = world.depth - 1.2; this.vz = 0; }
+    if (this.y < 1.2) { this.y = 1.2; this.vy = 0; }
+    else if (this.y > world.height - 1.2) { this.y = world.height - 1.2; this.vy = 0; }
   };
   Camera.prototype.look = function (dyaw, dpitch) {
     this.yaw = (this.yaw + dyaw) % (2 * Math.PI);

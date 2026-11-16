@@ -6,7 +6,8 @@ import math
 
 
 class Camera:
-    __slots__ = ("x", "y", "z", "yaw", "pitch", "fov", "speed")
+    __slots__ = ("x", "y", "z", "yaw", "pitch", "fov", "speed",
+                 "vx", "vy", "vz")
 
     def __init__(self, x: float, y: float, z: float,
                  yaw: float = 0.0, pitch: float = 0.0,
@@ -19,6 +20,7 @@ class Camera:
         self.fov = math.radians(fov_degrees)
         # Walking the full 1024-wide world takes about five minutes.
         self.speed = 3.4
+        self.vx = self.vy = self.vz = 0.0
 
     def basis(self):
         """Return (forward, right, up), an orthonormal camera basis."""
@@ -33,22 +35,43 @@ class Camera:
 
     def move(self, dt: float, forward: float, strafe: float,
              vertical: float, world, sprint: bool = False) -> None:
-        mag = math.hypot(forward, strafe)
+        mag = math.sqrt(forward * forward + strafe * strafe + vertical * vertical)
         if mag > 1.0:
             forward /= mag
             strafe /= mag
+            vertical /= mag
         speed = self.speed * (1.8 if sprint else 1.0)
         cy = math.cos(self.yaw)
         sy = math.sin(self.yaw)
         # Horizontal flight keeps the camera level; Space/C handle altitude.
-        dx = (sy * forward + cy * strafe) * speed * dt
-        dz = (cy * forward - sy * strafe) * speed * dt
-        self.x += dx
-        self.z += dz
-        self.y += vertical * speed * dt
-        self.x = max(1.2, min(world.width - 1.2, self.x))
-        self.z = max(1.2, min(world.depth - 1.2, self.z))
-        self.y = max(1.2, min(world.height - 1.2, self.y))
+        target_x = (sy * forward + cy * strafe) * speed
+        target_z = (cy * forward - sy * strafe) * speed
+        target_y = vertical * speed
+
+        # Exponential approach gives short acceleration and deceleration ramps
+        # without adding a visible lag. Sprint also stiffens the response.
+        response = 1.0 - math.exp(-(16.0 if sprint else 12.0) * dt)
+        self.vx += (target_x - self.vx) * response
+        self.vy += (target_y - self.vy) * response
+        self.vz += (target_z - self.vz) * response
+
+        self.x += self.vx * dt
+        self.z += self.vz * dt
+        self.y += self.vy * dt
+
+        # Stop cleanly at the finite world edge instead of buzzing against it.
+        if self.x < 1.2:
+            self.x, self.vx = 1.2, 0.0
+        elif self.x > world.width - 1.2:
+            self.x, self.vx = world.width - 1.2, 0.0
+        if self.z < 1.2:
+            self.z, self.vz = 1.2, 0.0
+        elif self.z > world.depth - 1.2:
+            self.z, self.vz = world.depth - 1.2, 0.0
+        if self.y < 1.2:
+            self.y, self.vy = 1.2, 0.0
+        elif self.y > world.height - 1.2:
+            self.y, self.vy = world.height - 1.2, 0.0
 
     def look(self, dyaw: float, dpitch: float) -> None:
         self.yaw = (self.yaw + dyaw) % (2.0 * math.pi)
@@ -58,3 +81,4 @@ class Camera:
     def teleport(self, x: float, y: float, z: float, yaw: float, pitch: float) -> None:
         self.x, self.y, self.z = float(x), float(y), float(z)
         self.yaw, self.pitch = float(yaw), float(pitch)
+        self.vx = self.vy = self.vz = 0.0
