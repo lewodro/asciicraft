@@ -4,7 +4,7 @@
 
 ### ASCII Minecraft in your terminal.
 
-A procedural voxel world — hills, lakes, caves, forests and snow — raycast into
+A procedural mc-like world - hills, lakes, caves, forests and snow - raycast into
 **colored characters**. No GPU, no textures, no game engine, no dependencies.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
