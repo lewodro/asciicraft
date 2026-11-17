@@ -585,7 +585,9 @@ class RaycastRenderer:
 
     # ---------------------------------------------------------------- tracing
     def render(self, time_seconds: float = 0.0) -> list[int]:
-        return self.render_band(0, self.pixel_height, time_seconds)
+        pixels = self.render_band(0, self.pixel_height, time_seconds)
+        self.draw_entities(pixels, time_seconds)
+        return pixels
 
     def render_band(self, y_start: int, y_end: int,
                     time_seconds: float = 0.0) -> list[int]:
@@ -675,3 +677,65 @@ class RaycastRenderer:
             pixels[i - start_index] = (_clamp_byte(r) << 16) | (_clamp_byte(g) << 8) | _clamp_byte(bl)
 
         return pixels
+
+    # --------------------------------------------------------------- entities
+    def draw_entities(self, pixels: list[int], time_seconds: float) -> None:
+        """Project orbiting birds over the finished frame with a depth test."""
+        entities = self.world.entities
+        if not entities:
+            return
+        cam = self.camera
+        forward, right, up = cam.basis()
+        fx, fy, fz = forward
+        rx, ry, rz = right
+        ux, uy, uz = up
+        ox, oy, oz = cam.x, cam.y, cam.z
+        pw = self.width
+        ph = self.pixel_height
+        tan_h = math.tan(cam.fov * 0.5)
+        aspect = 1.0 if self.mode == MODE_HALF else 2.0
+        tan_v = tan_h * (ph / pw) * aspect
+        x_scale = pw * 0.5 / tan_h
+        y_scale = ph * 0.5 / tan_v
+
+        for bx, by, bz, orbit, spin, phase, radius in entities:
+            angle = phase + time_seconds * spin
+            ex = bx + math.cos(angle) * orbit
+            ez = bz + math.sin(angle) * orbit
+            ey = by + math.sin(time_seconds * 1.7 + phase) * 1.1
+            vx = ex - ox
+            vy = ey - oy
+            vz = ez - oz
+            depth = vx * fx + vy * fy + vz * fz
+            if depth < 1.0:
+                continue
+            ix = int(pw * 0.5 + (vx * rx + vy * ry + vz * rz) / depth * x_scale)
+            iy = int(ph * 0.5 - (vx * ux + vy * uy + vz * uz) / depth * y_scale)
+            if ix < 0 or ix >= pw or iy < 0 or iy >= ph:
+                continue
+            length = math.sqrt(vx * vx + vy * vy + vz * vz)
+            if length < 0.001 or length > 150.0:
+                continue
+            rdx = vx / length
+            rdy = vy / length
+            rdz = vz / length
+            hit = self._trace(ox, oy, oz, rdx, rdy, rdz)
+            if hit is not None and hit[7] < length - 0.9:
+                continue
+
+            size = radius * x_scale / depth
+            n = 1 if size < 1.4 else (2 if size < 3.0 else 3)
+            fog = 1.0 - math.exp(-(length / FOG_DISTANCE) ** 2)
+            sr, sg, sb = self._sky(rdx, rdy, rdz)
+            packed = (_clamp_byte(250.0 * (1.0 - fog) + sr * fog) << 16
+                      | _clamp_byte(238.0 * (1.0 - fog) + sg * fog) << 8
+                      | _clamp_byte(190.0 * (1.0 - fog) + sb * fog))
+            x0 = ix - (n - 1) // 2
+            y0 = iy - (n - 1) // 2
+            for yy in range(y0, y0 + n):
+                if yy < 0 or yy >= ph:
+                    continue
+                row = yy * pw
+                for xx in range(x0, x0 + n):
+                    if 0 <= xx < pw:
+                        pixels[row + xx] = packed

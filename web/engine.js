@@ -225,6 +225,7 @@
     this.heightMap = new Int16Array(this.width * this.depth);
     this.biomes = new Uint8Array(this.width * this.depth);
     this.structures = [];
+    this.entities = [];
     this.spawn = [this.width * 0.5, this.height * 0.72, this.depth * 0.5, 0, 0];
     this.macro = new Uint8Array(0);
     this.macroDims = [1, 1, 1];
@@ -415,8 +416,14 @@
     }
 
     placeStructures(this, rng);
+    placeEntities(this, rng);
     this.buildMacro();
     this.spawn = chooseSpawn(this);
+    var sp = this.spawn;
+    var sfx = Math.sin(sp[3]) * Math.cos(sp[4]);
+    var sfz = Math.cos(sp[3]) * Math.cos(sp[4]);
+    this.entities.push([sp[0] + sfx * 26.0, sp[1] + 7.0, sp[2] + sfz * 26.0,
+                        4.0, 0.28, 0.0, 0.50]);
     var ended = (typeof performance !== "undefined") ? performance.now() : Date.now();
     this.genTime = (ended - started) / 1000;
     return this;
@@ -526,6 +533,24 @@
     }
     for (y = floor + 5; y <= floor + 8; y++) {
       grid[(cx + half - 1) + width * ((cz + half - 1) + depth * y)] = STONE;
+    }
+  }
+
+  function placeEntities(world, rng) {
+    var width = world.width, depth = world.depth;
+    var heights = world.heightMap, sea = world.seaLevel;
+    for (var i = 0; i < 28; i++) {
+      var x = rng.randrange(20, width - 20);
+      var z = rng.randrange(20, depth - 20);
+      var h = heights[x + width * z];
+      if (h <= sea + 1) continue;
+      var y = h + 6 + rng.randrange(0, 8);
+      var orbit = 3.0 + rng.random() * 5.0;
+      var spin = 0.18 + rng.random() * 0.22;
+      if (rng.random() < 0.5) spin = -spin;
+      var phase = rng.random() * Math.PI * 2;
+      var radius = 0.22 + rng.random() * 0.18;
+      world.entities.push([x, y, z, orbit, spin, phase, radius]);
     }
   }
 
@@ -1093,6 +1118,56 @@
     return false;
   };
 
+  Renderer.prototype._drawEntities = function (pixels, t) {
+    var entities = this.world.entities;
+    if (!entities.length) return;
+    var cam = this.camera;
+    var b = cam.basis();
+    var fx = b[0], fy = b[1], fz = b[2];
+    var rx = b[3], ry = b[4], rz = b[5];
+    var ux = b[6], uy = b[7], uz = b[8];
+    var ox = cam.x, oy = cam.y, oz = cam.z;
+    var W = this.width, ph = this.pixelHeight;
+    var tanH = Math.tan(cam.fov * 0.5);
+    var aspect = this.mode === "half" ? 1 : 2;
+    var tanV = tanH * (ph / W) * aspect;
+    var xScale = W * 0.5 / tanH, yScale = ph * 0.5 / tanV;
+    var hit = this._hit, rgb = this._rgb;
+    for (var e = 0; e < entities.length; e++) {
+      var ent = entities[e];
+      var angle = ent[5] + t * ent[4];
+      var ex = ent[0] + Math.cos(angle) * ent[3];
+      var ez = ent[2] + Math.sin(angle) * ent[3];
+      var ey = ent[1] + Math.sin(t * 1.7 + ent[5]) * 1.1;
+      var vx = ex - ox, vy = ey - oy, vz = ez - oz;
+      var depth = vx * fx + vy * fy + vz * fz;
+      if (depth < 1) continue;
+      var ix = Math.trunc(W * 0.5 + (vx * rx + vy * ry + vz * rz) / depth * xScale);
+      var iy = Math.trunc(ph * 0.5 - (vx * ux + vy * uy + vz * uz) / depth * yScale);
+      if (ix < 0 || ix >= W || iy < 0 || iy >= ph) continue;
+      var len = Math.sqrt(vx * vx + vy * vy + vz * vz);
+      if (len < 0.001 || len > 150) continue;
+      var rdx = vx / len, rdy = vy / len, rdz = vz / len;
+      if (this._trace(ox, oy, oz, rdx, rdy, rdz, hit) && hit[7] < len - 0.9) continue;
+      var size = ent[6] * xScale / depth;
+      var n = size < 1.4 ? 1 : (size < 3 ? 2 : 3);
+      var fog = 1 - Math.exp(-Math.pow(len / FOG_DISTANCE, 2));
+      this._sky(rdx, rdy, rdz, rgb);
+      var col = (clampByte(250 * (1 - fog) + rgb[0] * fog) << 16) |
+                (clampByte(238 * (1 - fog) + rgb[1] * fog) << 8) |
+                clampByte(190 * (1 - fog) + rgb[2] * fog);
+      var x0 = ix - Math.floor((n - 1) / 2);
+      var y0 = iy - Math.floor((n - 1) / 2);
+      for (var yy = y0; yy < y0 + n; yy++) {
+        if (yy < 0 || yy >= ph) continue;
+        var row = yy * W;
+        for (var xx = x0; xx < x0 + n; xx++) {
+          if (xx >= 0 && xx < W) pixels[row + xx] = col;
+        }
+      }
+    }
+  };
+
   Renderer.prototype.render = function (timeSeconds) {
     var t = timeSeconds || 0;
     var cam = this.camera, world = this.world;
@@ -1150,6 +1225,7 @@
       }
       pixels[i] = (clampByte(r) << 16) | (clampByte(g) << 8) | clampByte(bl);
     }
+    this._drawEntities(pixels, t);
     return pixels;
   };
 

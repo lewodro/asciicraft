@@ -88,6 +88,7 @@ class ParallelRenderer:
             arr = array.array("I")
             arr.frombytes(payload)
             pixels[y0 * self.renderer.width:y1 * self.renderer.width] = arr
+        self.renderer.draw_entities(pixels, now)
         return pixels
 
     def close(self) -> None:
