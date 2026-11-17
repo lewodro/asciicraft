@@ -272,6 +272,26 @@ class RaycastRenderer:
         else:
             base = (120, 120, 120)
 
+        # Skylight falls off below the local terrain top, so carved caves read
+        # as dark rock instead of sunlit stone.  A short-range head lamp keeps
+        # nearby walls readable without flattening the darkness overhead.
+        w = self.world
+        ground = w.height_map[bx + w.width * bz]
+        if by < ground:
+            shade = 1.0 - (ground - by) * 0.055
+            if shade < 0.30:
+                shade = 0.30
+            reach = 1.0 - t / 34.0
+            if reach > 0.0:
+                lamp = reach * reach
+                base = (base[0] + lamp * 20.0,
+                        base[1] + lamp * 17.0,
+                        base[2] + lamp * 10.0)
+                boost = 0.52 + lamp * 0.48
+                if shade < boost:
+                    shade = boost
+            base = (base[0] * shade, base[1] * shade, base[2] * shade)
+
         return base
 
     def _macro_entry(self, ox: float, oy: float, oz: float,

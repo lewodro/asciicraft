@@ -797,6 +797,20 @@
     } else {
       r = 120; g = 120; b = 120;
     }
+    // Skylight falloff underground plus a short-range head lamp.
+    var ground = this.world.heightMap[bx + this.world.width * bz];
+    if (by < ground) {
+      var shade = 1 - (ground - by) * 0.055;
+      if (shade < 0.30) shade = 0.30;
+      var reach = 1 - t / 34;
+      if (reach > 0) {
+        var lamp = reach * reach;
+        r += lamp * 20; g += lamp * 17; b += lamp * 10;
+        var boost = 0.52 + lamp * 0.48;
+        if (shade < boost) shade = boost;
+      }
+      r *= shade; g *= shade; b *= shade;
+    }
     out[0] = r; out[1] = g; out[2] = b;
   };
 
