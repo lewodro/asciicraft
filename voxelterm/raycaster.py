@@ -240,6 +240,17 @@ class RaycastRenderer:
             base = (228 * g, 235 * g, 244 * g)
             if grain < 0.10:
                 base = (190 * g, 204 * g, 220 * g)
+        elif block == blocks.PLANK:
+            if ny > 0:
+                g = 0.92 + grain * 0.12
+                base = (176 * g, 138 * g, 92 * g)
+            else:
+                # Horizontal boards with a darker seam every few voxels.
+                seam = 0.5 + 0.5 * math.sin(v * 24.0 + grain * 1.7)
+                g = 0.84 + 0.16 * seam
+                base = (158 * g, 120 * g, 78 * g)
+                if grain < 0.05:
+                    base = (96, 70, 45)
         elif block == blocks.WOOD:
             if ny:
                 rr = math.hypot(u - 0.5, v - 0.5)

@@ -39,7 +39,7 @@ class World:
         "seed", "width", "depth", "height", "sea_level",
         "grid", "height_map", "chunks", "spawn", "generation_time",
         "macro", "macro_dims", "macro_size", "macro_top", "timings",
-        "biomes",
+        "biomes", "structures",
     )
 
     def __init__(self, seed: int,
@@ -62,6 +62,7 @@ class World:
         self.macro_top = bytearray()
         self.timings: dict[str, float] = {}
         self.biomes = bytearray(width * depth)
+        self.structures: list[tuple[int, int, str]] = []
 
     # ------------------------------------------------------------------ access
     def index(self, x: int, y: int, z: int) -> int:
@@ -268,7 +269,14 @@ class World:
         self.timings["trees"] = time.perf_counter() - mark
         mark = time.perf_counter()
 
-        # 4. Split the dense mirror into conventional chunks and build the
+        # 4. Cabins and ruins on flat, dry ground.  Structures are placed
+        #    after trees so they can clear the site, and before the macro
+        #    pyramid so the raycaster sees them immediately.
+        self._place_structures(rng)
+        self.timings["structures"] = time.perf_counter() - mark
+        mark = time.perf_counter()
+
+        # 5. Split the dense mirror into conventional chunks and build the
         #    coarse occupancy pyramid used to skip empty air in the DDA.
         self._build_chunks()
         self.timings["chunks"] = time.perf_counter() - mark
@@ -283,6 +291,124 @@ class World:
         self.timings["spawn"] = time.perf_counter() - mark
         self.generation_time = time.perf_counter() - started
         return self
+
+    def _place_structures(self, rng: random.Random) -> None:
+        """Scatter a handful of cabins and ruins on buildable ground."""
+        width, depth, height = self.width, self.depth, self.height
+        grid = self.grid
+        heights = self.height_map
+        sea = self.sea_level
+
+        for gz in range(28, depth - 28, 36):
+            for gx in range(28, width - 28, 36):
+                if rng.random() > 0.80:
+                    continue
+                cabin = rng.random() < 0.45
+                half = 3 if cabin else 4
+                cx = gx + rng.randrange(-9, 10)
+                cz = gz + rng.randrange(-9, 10)
+
+                lo = hi = heights[cx + width * cz]
+                ok = True
+                for oz in range(-half, half + 1):
+                    for ox in range(-half, half + 1):
+                        hh = heights[(cx + ox) + width * (cz + oz)]
+                        if hh <= sea + 1 or hh >= height - 18:
+                            ok = False
+                            break
+                        if hh < lo:
+                            lo = hh
+                        elif hh > hi:
+                            hi = hh
+                    if not ok:
+                        break
+                if not ok or hi - lo > 5:
+                    continue
+
+                floor = hi
+                floor_block = blocks.PLANK if cabin else blocks.STONE
+                # Clear and level the site (plus a one-voxel margin).  Water
+                # at the margin is left alone so lakes keep their shoreline.
+                for oz in range(-half - 1, half + 2):
+                    for ox in range(-half - 1, half + 2):
+                        x = cx + ox
+                        z = cz + oz
+                        hh = heights[x + width * z]
+                        if hh <= sea:
+                            continue
+                        for y in range(hh + 1, floor + 11):
+                            grid[x + width * (z + depth * y)] = blocks.AIR
+                        for y in range(hh + 1, floor + 1):
+                            grid[x + width * (z + depth * y)] = blocks.STONE
+                        if floor > hh:
+                            heights[x + width * z] = floor
+                        if abs(ox) <= half and abs(oz) <= half:
+                            grid[x + width * (z + depth * floor)] = floor_block
+
+                if cabin:
+                    self._build_cabin(cx, floor, cz, half)
+                else:
+                    self._build_ruin(cx, floor, cz, half, rng)
+                self.structures.append((cx, cz, "cabin" if cabin else "ruin"))
+
+    def _build_cabin(self, cx: int, floor: int, cz: int, half: int) -> None:
+        width, depth = self.width, self.depth
+        grid = self.grid
+        top = floor + 4
+        for y in range(floor + 1, top + 1):
+            for oz in range(-half, half + 1):
+                for ox in range(-half, half + 1):
+                    ex = abs(ox) == half
+                    ez = abs(oz) == half
+                    if not (ex or ez):
+                        continue
+                    block = blocks.WOOD if (ex and ez) else blocks.PLANK
+                    grid[(cx + ox) + width * ((cz + oz) + depth * y)] = block
+        # Door on the -Z wall, windows centred on the other three.
+        for y in (floor + 1, floor + 2):
+            grid[cx + width * ((cz - half) + depth * y)] = blocks.AIR
+        for sx in (-1, 1):
+            grid[(cx + sx * half) + width * (cz + depth * (floor + 2))] = blocks.AIR
+        grid[cx + width * ((cz + half) + depth * (floor + 2))] = blocks.AIR
+        # Stepped pyramid roof; a stone chimney pokes through one corner.
+        for step, radius in ((5, half), (6, half - 1), (7, max(1, half - 2))):
+            for oz in range(-radius, radius + 1):
+                for ox in range(-radius, radius + 1):
+                    grid[(cx + ox) + width * ((cz + oz) + depth * (floor + step))] = blocks.PLANK
+        for y in range(floor + 5, floor + 9):
+            grid[(cx + half - 1) + width * ((cz + half - 1) + depth * y)] = blocks.STONE
+
+    def _build_ruin(self, cx: int, floor: int, cz: int, half: int,
+                    rng: random.Random) -> None:
+        width, depth = self.width, self.depth
+        grid = self.grid
+        # Crumbling perimeter walls, taller toward the corners.
+        for y in range(floor + 1, floor + 4):
+            for oz in range(-half, half + 1):
+                for ox in range(-half, half + 1):
+                    if abs(ox) != half and abs(oz) != half:
+                        continue
+                    roll = rng.random()
+                    if roll < 0.42:
+                        continue
+                    if roll < 0.62 and y > floor + 1:
+                        continue
+                    if roll < 0.78 and y > floor + 2:
+                        continue
+                    grid[(cx + ox) + width * ((cz + oz) + depth * y)] = blocks.STONE
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                for y in range(floor + 1, floor + 5):
+                    grid[(cx + sx * half) + width * ((cz + sz * half) + depth * y)] = blocks.STONE
+        for y in (floor + 1, floor + 2):
+            grid[cx + width * ((cz - half) + depth * y)] = blocks.AIR
+        # Fallen rubble around the footprint.
+        for _ in range(rng.randrange(5, 11)):
+            ox = rng.randrange(-half - 1, half + 2)
+            oz = rng.randrange(-half - 1, half + 2)
+            i = (cx + ox) + width * ((cz + oz) + depth * (floor + 1))
+            if grid[i] == blocks.AIR:
+                grid[i] = blocks.STONE
 
     def _grow_tree(self, x: int, ground: int, z: int, rng: random.Random) -> None:
         trunk_h = rng.randint(4, 7)

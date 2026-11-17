@@ -100,6 +100,8 @@ def main() -> int:
         world_failures.append("biome map checksum differs")
     if js["biomeLen"] != len(world.biomes):
         world_failures.append("biome map length differs")
+    if js["structureCount"] != len(world.structures):
+        world_failures.append("structure count differs")
     failures.extend(world_failures)
     spawn = tuple(round(v, 6) for v in js["spawn"])
     py_spawn = tuple(round(v, 6) for v in world.spawn)

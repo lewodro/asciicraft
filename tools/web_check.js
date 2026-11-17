@@ -58,6 +58,7 @@ print(JSON.stringify({
   gridLen: world.grid.length,
   biomeHash: biomeHash,
   biomeLen: world.biomes.length,
+  structureCount: world.structures.length,
   charKinds: Object.keys(counts).length,
   topChars: Object.keys(counts).sort(function (a, b) {
     return counts[b] - counts[a];

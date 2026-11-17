@@ -12,15 +12,15 @@
 
   // ---------------------------------------------------------------- blocks
   var AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WATER = 4,
-      WOOD = 5, LEAVES = 6, SAND = 7, SNOW = 8;
+      WOOD = 5, LEAVES = 6, SAND = 7, SNOW = 8, PLANK = 9;
 
   // Surface biomes; mirrors world.py.
   var BIOME_PLAINS = 0, BIOME_FOREST = 1, BIOME_SAVANNA = 2, BIOME_DESERT = 3;
   var BIOME_NAMES = ["plains", "forest", "savanna", "desert"];
   var BIOME_STRIDE = 4;
 
-  var OCCLUDERS = new Uint8Array(9);
-  [GRASS, DIRT, STONE, WOOD, SAND, SNOW].forEach(function (b) { OCCLUDERS[b] = 1; });
+  var OCCLUDERS = new Uint8Array(10);
+  [GRASS, DIRT, STONE, WOOD, SAND, SNOW, PLANK].forEach(function (b) { OCCLUDERS[b] = 1; });
 
   var FACE_LIGHT = {
     "0,1,0": 1.00, "0,-1,0": 0.44,
@@ -224,6 +224,7 @@
     this.grid = new Uint8Array(this.width * this.depth * this.height);
     this.heightMap = new Int16Array(this.width * this.depth);
     this.biomes = new Uint8Array(this.width * this.depth);
+    this.structures = [];
     this.spawn = [this.width * 0.5, this.height * 0.72, this.depth * 0.5, 0, 0];
     this.macro = new Uint8Array(0);
     this.macroDims = [1, 1, 1];
@@ -413,6 +414,7 @@
       }
     }
 
+    placeStructures(this, rng);
     this.buildMacro();
     this.spawn = chooseSpawn(this);
     var ended = (typeof performance !== "undefined") ? performance.now() : Date.now();
@@ -444,6 +446,121 @@
       }
     }
     for (var y = ground + 1; y <= top; y++) world.set(x, y, z, WOOD);
+  }
+
+  function placeStructures(world, rng) {
+    var width = world.width, depth = world.depth, height = world.height;
+    var grid = world.grid, heights = world.heightMap, sea = world.seaLevel;
+    for (var gz = 28; gz < depth - 28; gz += 36) {
+      for (var gx = 28; gx < width - 28; gx += 36) {
+        if (rng.random() > 0.80) continue;
+        var cabin = rng.random() < 0.45;
+        var half = cabin ? 3 : 4;
+        var cx = gx + rng.randrange(-9, 10);
+        var cz = gz + rng.randrange(-9, 10);
+        var lo = heights[cx + width * cz], hi = lo, ok = true;
+        for (var oz = -half; oz <= half; oz++) {
+          for (var ox = -half; ox <= half; ox++) {
+            var hh = heights[(cx + ox) + width * (cz + oz)];
+            if (hh <= sea + 1 || hh >= height - 18) { ok = false; break; }
+            if (hh < lo) lo = hh;
+            else if (hh > hi) hi = hh;
+          }
+          if (!ok) break;
+        }
+        if (!ok || hi - lo > 5) continue;
+        var floor = hi;
+        var floorBlock = cabin ? PLANK : STONE;
+        for (var mz = -half - 1; mz <= half + 1; mz++) {
+          for (var mx = -half - 1; mx <= half + 1; mx++) {
+            var x = cx + mx, z = cz + mz;
+            var mh = heights[x + width * z];
+            if (mh <= sea) continue;
+            for (var y = mh + 1; y <= floor + 10; y++) {
+              grid[x + width * (z + depth * y)] = AIR;
+            }
+            for (y = mh + 1; y <= floor; y++) {
+              grid[x + width * (z + depth * y)] = STONE;
+            }
+            if (floor > mh) heights[x + width * z] = floor;
+            if (Math.abs(mx) <= half && Math.abs(mz) <= half) {
+              grid[x + width * (z + depth * floor)] = floorBlock;
+            }
+          }
+        }
+        if (cabin) buildCabin(world, cx, floor, cz, half);
+        else buildRuin(world, cx, floor, cz, half, rng);
+        world.structures.push([cx, cz, cabin ? "cabin" : "ruin"]);
+      }
+    }
+  }
+
+  function buildCabin(world, cx, floor, cz, half) {
+    var width = world.width, depth = world.depth, grid = world.grid;
+    var top = floor + 4, y, ox, oz;
+    for (y = floor + 1; y <= top; y++) {
+      for (oz = -half; oz <= half; oz++) {
+        for (ox = -half; ox <= half; ox++) {
+          var ex = Math.abs(ox) === half, ez = Math.abs(oz) === half;
+          if (!(ex || ez)) continue;
+          var block = (ex && ez) ? WOOD : PLANK;
+          grid[(cx + ox) + width * ((cz + oz) + depth * y)] = block;
+        }
+      }
+    }
+    for (y = floor + 1; y <= floor + 2; y++) {
+      grid[cx + width * ((cz - half) + depth * y)] = AIR;
+    }
+    for (var sx = -1; sx <= 1; sx += 2) {
+      grid[(cx + sx * half) + width * (cz + depth * (floor + 2))] = AIR;
+    }
+    grid[cx + width * ((cz + half) + depth * (floor + 2))] = AIR;
+    var steps = [[5, half], [6, half - 1], [7, Math.max(1, half - 2)]];
+    for (var s = 0; s < 3; s++) {
+      var step = steps[s][0], radius = steps[s][1];
+      for (oz = -radius; oz <= radius; oz++) {
+        for (ox = -radius; ox <= radius; ox++) {
+          grid[(cx + ox) + width * ((cz + oz) + depth * (floor + step))] = PLANK;
+        }
+      }
+    }
+    for (y = floor + 5; y <= floor + 8; y++) {
+      grid[(cx + half - 1) + width * ((cz + half - 1) + depth * y)] = STONE;
+    }
+  }
+
+  function buildRuin(world, cx, floor, cz, half, rng) {
+    var width = world.width, depth = world.depth, grid = world.grid;
+    var y, ox, oz;
+    for (y = floor + 1; y <= floor + 3; y++) {
+      for (oz = -half; oz <= half; oz++) {
+        for (ox = -half; ox <= half; ox++) {
+          if (Math.abs(ox) !== half && Math.abs(oz) !== half) continue;
+          var roll = rng.random();
+          if (roll < 0.42) continue;
+          if (roll < 0.62 && y > floor + 1) continue;
+          if (roll < 0.78 && y > floor + 2) continue;
+          grid[(cx + ox) + width * ((cz + oz) + depth * y)] = STONE;
+        }
+      }
+    }
+    for (var sx = -1; sx <= 1; sx += 2) {
+      for (var sz = -1; sz <= 1; sz += 2) {
+        for (y = floor + 1; y <= floor + 4; y++) {
+          grid[(cx + sx * half) + width * ((cz + sz * half) + depth * y)] = STONE;
+        }
+      }
+    }
+    for (y = floor + 1; y <= floor + 2; y++) {
+      grid[cx + width * ((cz - half) + depth * y)] = AIR;
+    }
+    var rubble = rng.randrange(5, 11);
+    for (var r = 0; r < rubble; r++) {
+      ox = rng.randrange(-half - 1, half + 2);
+      oz = rng.randrange(-half - 1, half + 2);
+      var i = (cx + ox) + width * ((cz + oz) + depth * (floor + 1));
+      if (grid[i] === AIR) grid[i] = STONE;
+    }
   }
 
   World.prototype.buildMacro = function () {
@@ -762,6 +879,16 @@
       gg = 0.90 + grain * 0.12;
       r = 228 * gg; g = 235 * gg; b = 244 * gg;
       if (grain < 0.10) { r = 190 * gg; g = 204 * gg; b = 220 * gg; }
+    } else if (block === PLANK) {
+      if (ny > 0) {
+        gg = 0.92 + grain * 0.12;
+        r = 176 * gg; g = 138 * gg; b = 92 * gg;
+      } else {
+        var seam = 0.5 + 0.5 * Math.sin(v * 24 + grain * 1.7);
+        gg = 0.84 + 0.16 * seam;
+        r = 158 * gg; g = 120 * gg; b = 78 * gg;
+        if (grain < 0.05) { r = 96; g = 70; b = 45; }
+      }
     } else if (block === WOOD) {
       if (ny) {
         var rr = Math.hypot(u - 0.5, v - 0.5);
@@ -1054,7 +1181,10 @@
 
   global.VT = {
     AIR: AIR, GRASS: GRASS, DIRT: DIRT, STONE: STONE, WATER: WATER,
-    WOOD: WOOD, LEAVES: LEAVES, SAND: SAND, SNOW: SNOW,
+    WOOD: WOOD, LEAVES: LEAVES, SAND: SAND, SNOW: SNOW, PLANK: PLANK,
+    BIOME_PLAINS: BIOME_PLAINS, BIOME_FOREST: BIOME_FOREST,
+    BIOME_SAVANNA: BIOME_SAVANNA, BIOME_DESERT: BIOME_DESERT,
+    BIOME_NAMES: BIOME_NAMES,
     WORLD_WIDTH: WORLD_WIDTH, WORLD_DEPTH: WORLD_DEPTH,
     WORLD_HEIGHT: WORLD_HEIGHT, SEA_LEVEL: SEA_LEVEL,
     ASCII_RAMP: ASCII_RAMP,
