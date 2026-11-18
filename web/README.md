@@ -58,6 +58,10 @@ the URL updates to match. **R** generates a new random seed.
 
 The seed box and **Resume** button appear when paused.
 
+The status line shows the biome under the camera, height above local ground,
+the nearest cabin or ruin with distance and compass letter, and how many sites
+you have reached on this seed (`sites 3/12`).
+
 ## Notes
 
 The engine is a faithful port of the Python implementation. `tools/web_parity.py`

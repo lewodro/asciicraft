@@ -35,7 +35,9 @@ printable characters and ANSI colour codes.
 
 - **21 million voxels** generated from a single seed
 - **About five minutes** to walk across at walking speed
-- Hills, lakes, beaches, caves, forests and snow-capped ridges
+- Hills, lakes, beaches, caves, forests and snow-capped ridges, split into
+  plains, forest, savanna and desert biomes
+- Cabins and ruins to find, with birds circling overhead and cacti in the dunes
 - Truecolor ASCII with directional face lighting, ambient occlusion, procedural
   grain, animated water and distance fog
 - Terminal build in **pure Python** (standard library only) and a matching
@@ -112,6 +114,11 @@ them are in [`assets/README.md`](assets/README.md).
 | `R` | generate a new random world |
 | `[` `]` | lower / raise render quality |
 | `Q`, `Esc` | quit |
+
+The status line reports the biome under the camera and your height above local
+ground, names the nearest cabin or ruin with a distance and compass letter, and
+counts the sites you have reached (`sites 3/12`). Walking within 14 metres of a
+landmark marks it as explored for the current seed.
 
 Terminals cannot report a bare Shift key, so `C`/`X` is the portable descend
 key and `E` is hold-to-sprint.
@@ -226,9 +233,12 @@ serve the repository root: the root `index.html` redirects to `web/`.
 **World.** A domain-warped continental fBm plus a ridged mountain mask builds the
 height map. Columns are filled with stone, dirt, grass, sand and snow; water
 fills to sea level; two intersecting 3D noise isosurfaces carve tunnels and
-caverns; a jittered lattice plants trees. A dense `bytearray` holds the voxels,
-an 8³ occupancy array lets the tracer skip empty air, and 16³ chunks are kept
-for inspection.
+caverns; a jittered lattice plants trees, and a low-frequency heat/moisture map
+selects a biome that tints the grass and controls tree and cactus density.
+Cabins and ruins are levelled onto flat dry ground, cave air gets dripstone and
+ore, and a handful of birds orbit fixed points. A dense `bytearray` holds the
+voxels, an 8³ occupancy array lets the tracer skip empty air, and 16³ chunks are
+kept for inspection.
 
 **Tracing.** Each cell gets a ray from an orthonormal camera basis. A coarse DDA
 walks 8³ macro cells until it finds an occupied one, then an exact voxel DDA
@@ -247,7 +257,7 @@ asciicraft/
 ├── CONTRIBUTING.md         setup, checks and review expectations
 ├── CHANGELOG.md            release history
 ├── voxelterm/              Python engine and terminal app
-│   ├── world.py            terrain, caves, trees, macro cache
+│   ├── world.py            terrain, biomes, caves, structures, entities
 │   ├── raycaster.py        hierarchical voxel DDA + shader
 │   ├── ansi.py             70-glyph ramp + ANSI encoder
 │   ├── terminal.py         raw terminal + key parser
@@ -271,6 +281,7 @@ python3 tools/check_repo.py                                # required files + lo
 python3 tools/profile_render.py --small --frames 5         # generation/render/encode timings
 python3 tools/pty_test.py --small --width 70 --height 18   # input/quit/mode test
 python3 tools/web_parity.py                                # Python ↔ JS parity
+jsc tools/web_dom_test.js                                  # browser DOM smoke test
 ```
 
 The `tools/*.js` files run under the macOS JavaScriptCore shell (`jsc`) and are

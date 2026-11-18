@@ -31,6 +31,7 @@ def run(argv: list[str], rows: int = 30, cols: int = 100) -> int:
     script = [
         (5.0, b""),        # let the first frames render
         (5.5, b"w"),       # move forward
+        (6.0, b"w"),       # repeat in case the first lands during generation
         (6.5, b"\x1b[A"),  # look up
         (7.5, b"m"),       # ascii-color -> half
         (8.5, b"m"),       # half -> ascii mono

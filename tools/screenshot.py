@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import math
 import os
 import shutil
 import subprocess
@@ -67,9 +68,9 @@ def rgb(cell: int) -> tuple[int, int, int]:
 
 def lifted(cell: int) -> tuple[int, int, int]:
     r, g, b = rgb(cell)
-    return (min(255, int(r * 1.10 + 8)),
-            min(255, int(g * 1.10 + 8)),
-            min(255, int(b * 1.10 + 8)))
+    return (min(255, int(r * 1.14 + 10)),
+            min(255, int(g * 1.14 + 10)),
+            min(255, int(b * 1.14 + 10)))
 
 
 def cell_char(cell: int) -> str:
@@ -153,9 +154,32 @@ def main() -> int:
     renderer = RaycastRenderer(world, cam, args.width, view_rows,
                                MODE_ASCII_COLOR)
     pixels = renderer.render(0.0)
+    bx, bz = int(x), int(z)
+    ground = world.height_map[bx + world.width * bz]
+    elev = int(round(y - ground))
+    here = f"{world.biome_name(bx, bz)} {elev:+d}m"
+    sites = 0
+    nearest = None
+    best = float("inf")
+    for cx, cz, kind in world.structures:
+        dx, dz = cx - x, cz - z
+        dist = math.hypot(dx, dz)
+        if dist < 14.0:
+            sites += 1
+        if dist < best:
+            best = dist
+            if abs(dx) >= abs(dz):
+                arrow = "E" if dx >= 0.0 else "W"
+            else:
+                arrow = "S" if dz >= 0.0 else "N"
+            nearest = f"{kind} {dist:.0f}m {arrow}"
+    if world.structures:
+        here += f" | sites {sites}/{len(world.structures)}"
+    if nearest is not None:
+        here += f" | {nearest}"
     status = (f" AC {args.fps:4.1f}fps | seed {args.seed} | ASCII COLOR | "
               f"x{x:.0f}/{world.width} y{y:.0f} z{z:.0f} | "
-              f"{args.width}x{view_rows}")
+              f"{here} | {args.width}x{view_rows}")
     page = build_html(pixels, args.width, view_rows, status)
 
     out = Path(args.out)
