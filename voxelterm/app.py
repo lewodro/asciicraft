@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import random
 import shutil
 import sys
@@ -176,9 +177,31 @@ class Game:
         cam = self.camera
         mode = MODE_LABELS[self.mode]
         workers = self.worker_count if self.par is not None else 1
+        world = self.world
+        bx = int(cam.x)
+        bz = int(cam.z)
+        ground = world.height_map[bx + world.width * bz]
+        biome = world.biome_name(bx, bz)
+        # Find the closest landmark so players have a destination to steer by.
+        nearest = None
+        best = float("inf")
+        for cx, cz, kind in world.structures:
+            dx = cx - cam.x
+            dz = cz - cam.z
+            dist = math.hypot(dx, dz)
+            if dist < best:
+                best = dist
+                if abs(dx) >= abs(dz):
+                    arrow = "E" if dx >= 0.0 else "W"
+                else:
+                    arrow = "S" if dz >= 0.0 else "N"
+                nearest = f"{kind} {dist:.0f}m {arrow}"
+        here = f"{biome} {cam.y - ground:+.0f}m"
+        if nearest is not None:
+            here += f" | {nearest}"
         left = (f" AC {self.fps:4.1f}fps | seed {self.seed} | {mode} | "
-                f"x{cam.x:.0f}/{self.world.width} y{cam.y:.0f} z{cam.z:.0f} | "
-                f"{self.width}x{self.cell_height} | {workers}w")
+                f"x{cam.x:.0f}/{world.width} y{cam.y:.0f} z{cam.z:.0f} | "
+                f"{here} | {self.width}x{self.cell_height} | {workers}w")
         keys = " WASD move | arrows look | Space/C fly | E run | M mode | R seed | Q quit"
         if len(left) + len(keys) <= self.width:
             return left + keys

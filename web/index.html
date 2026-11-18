@@ -388,10 +388,28 @@
 
   function statusLine() {
     var label = MODE_LABEL[mode] || mode;
+    var bx = Math.floor(camera.x), bz = Math.floor(camera.z);
+    var ground = world.heightMap[bx + world.width * bz];
+    var elev = Math.round(camera.y - ground);
+    var here = world.biomeName(bx, bz) + " " + (elev >= 0 ? "+" : "") + elev + "m";
+    var best = Infinity, nearest = null;
+    for (var i = 0; i < world.structures.length; i++) {
+      var s = world.structures[i];
+      var dx = s[0] - camera.x, dz = s[1] - camera.z;
+      var dist = Math.hypot(dx, dz);
+      if (dist < best) {
+        best = dist;
+        var arrow;
+        if (Math.abs(dx) >= Math.abs(dz)) arrow = dx >= 0 ? "E" : "W";
+        else arrow = dz >= 0 ? "S" : "N";
+        nearest = s[2] + " " + Math.round(dist) + "m " + arrow;
+      }
+    }
+    if (nearest) here += " | " + nearest;
     var left = " AC " + fps.toFixed(1) + "fps | seed " + seed + " | " + label +
       " | x" + Math.round(camera.x) + "/" + world.width +
       " y" + Math.round(camera.y) + " z" + Math.round(camera.z) +
-      " | " + view.cols + "x" + view.rows;
+      " | " + here + " | " + view.cols + "x" + view.rows;
     var hint = "  WASD move | arrows look | Space/C fly | E run | M mode | R seed | Q pause";
     if ((left + hint).length <= view.cols) return left + hint;
     return left.length <= view.cols ? left : left.slice(0, view.cols);
