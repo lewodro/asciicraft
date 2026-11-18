@@ -270,20 +270,39 @@ class World:
         self.timings["trees"] = time.perf_counter() - mark
         mark = time.perf_counter()
 
-        # 4. Cabins and ruins on flat, dry ground.  Structures are placed
+        # 4. Cacti give the desert biome its own silhouette.  A jittered
+        #    lattice keeps them sparse; arms are added on taller stems.
+        for gx in range(6, width - 6, 9):
+            for gz in range(6, depth - 6, 9):
+                x = gx + rng.randrange(-2, 3)
+                z = gz + rng.randrange(-2, 3)
+                if biomes[x + width * z] != BIOME_DESERT:
+                    continue
+                h = heights[x + width * z]
+                if h <= sea + 1 or h >= height - 12:
+                    continue
+                if grid[x + width * (z + depth * h)] != blocks.SAND:
+                    continue
+                if rng.random() > 0.35:
+                    continue
+                self._grow_cactus(x, h, z, rng)
+        self.timings["cacti"] = time.perf_counter() - mark
+        mark = time.perf_counter()
+
+        # 5. Cabins and ruins on flat, dry ground.  Structures are placed
         #    after trees so they can clear the site, and before the macro
         #    pyramid so the raycaster sees them immediately.
         self._place_structures(rng)
         self.timings["structures"] = time.perf_counter() - mark
         mark = time.perf_counter()
 
-        # 5. Birds: a handful of orbiting flocks that animate from the frame
+        # 6. Birds: a handful of orbiting flocks that animate from the frame
         #    time, so no per-frame entity state has to be replicated.
         self._place_entities(rng)
         self.timings["entities"] = time.perf_counter() - mark
         mark = time.perf_counter()
 
-        # 6. Split the dense mirror into conventional chunks and build the
+        # 7. Split the dense mirror into conventional chunks and build the
         #    coarse occupancy pyramid used to skip empty air in the DDA.
         self._build_chunks()
         self.timings["chunks"] = time.perf_counter() - mark
@@ -440,6 +459,27 @@ class World:
             phase = rng.random() * math.tau
             radius = 0.22 + rng.random() * 0.18
             self.entities.append((float(x), y, float(z), orbit, spin, phase, radius))
+
+    def _grow_cactus(self, x: int, ground: int, z: int,
+                     rng: random.Random) -> None:
+        width, depth, height = self.width, self.depth, self.height
+        grid = self.grid
+        tall = rng.randrange(2, 5)
+        for y in range(ground + 1, ground + 1 + tall):
+            if y < height:
+                grid[x + width * (z + depth * y)] = blocks.CACTUS
+        if tall >= 3 and rng.random() < 0.7:
+            sx = 1 if rng.random() < 0.5 else -1
+            ax = x + sx
+            ay = ground + 2
+            if 0 <= ax < width:
+                i = ax + width * (z + depth * ay)
+                if grid[i] == blocks.AIR:
+                    grid[i] = blocks.CACTUS
+                if ay + 1 < height:
+                    i = ax + width * (z + depth * (ay + 1))
+                    if grid[i] == blocks.AIR:
+                        grid[i] = blocks.CACTUS
 
     def _grow_tree(self, x: int, ground: int, z: int, rng: random.Random) -> None:
         trunk_h = rng.randint(4, 7)

@@ -12,15 +12,15 @@
 
   // ---------------------------------------------------------------- blocks
   var AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WATER = 4,
-      WOOD = 5, LEAVES = 6, SAND = 7, SNOW = 8, PLANK = 9;
+      WOOD = 5, LEAVES = 6, SAND = 7, SNOW = 8, PLANK = 9, CACTUS = 10;
 
   // Surface biomes; mirrors world.py.
   var BIOME_PLAINS = 0, BIOME_FOREST = 1, BIOME_SAVANNA = 2, BIOME_DESERT = 3;
   var BIOME_NAMES = ["plains", "forest", "savanna", "desert"];
   var BIOME_STRIDE = 4;
 
-  var OCCLUDERS = new Uint8Array(10);
-  [GRASS, DIRT, STONE, WOOD, SAND, SNOW, PLANK].forEach(function (b) { OCCLUDERS[b] = 1; });
+  var OCCLUDERS = new Uint8Array(11);
+  [GRASS, DIRT, STONE, WOOD, SAND, SNOW, PLANK, CACTUS].forEach(function (b) { OCCLUDERS[b] = 1; });
 
   var FACE_LIGHT = {
     "0,1,0": 1.00, "0,-1,0": 0.44,
@@ -415,6 +415,20 @@
       }
     }
 
+    // 4. Cacti in the desert (jittered lattice).
+    for (var cgx = 6; cgx < width - 6; cgx += 9) {
+      for (var cgz = 6; cgz < depth - 6; cgz += 9) {
+        var ccx = cgx + rng.randrange(-2, 3);
+        var ccz = cgz + rng.randrange(-2, 3);
+        if (biomes[ccx + width * ccz] !== BIOME_DESERT) continue;
+        var ch = heights[ccx + width * ccz];
+        if (ch <= sea + 1 || ch >= height - 12) continue;
+        if (grid[ccx + width * (ccz + depth * ch)] !== SAND) continue;
+        if (rng.random() > 0.35) continue;
+        growCactus(this, ccx, ch, ccz, rng);
+      }
+    }
+
     placeStructures(this, rng);
     placeEntities(this, rng);
     this.buildMacro();
@@ -453,6 +467,27 @@
       }
     }
     for (var y = ground + 1; y <= top; y++) world.set(x, y, z, WOOD);
+  }
+
+  function growCactus(world, x, ground, z, rng) {
+    var width = world.width, depth = world.depth, height = world.height;
+    var grid = world.grid;
+    var tall = rng.randrange(2, 5);
+    for (var y = ground + 1; y <= ground + tall; y++) {
+      if (y < height) grid[x + width * (z + depth * y)] = CACTUS;
+    }
+    if (tall >= 3 && rng.random() < 0.7) {
+      var sx = rng.random() < 0.5 ? 1 : -1;
+      var ax = x + sx, ay = ground + 2;
+      if (ax >= 0 && ax < width) {
+        var i = ax + width * (z + depth * ay);
+        if (grid[i] === AIR) grid[i] = CACTUS;
+        if (ay + 1 < height) {
+          i = ax + width * (z + depth * (ay + 1));
+          if (grid[i] === AIR) grid[i] = CACTUS;
+        }
+      }
+    }
   }
 
   function placeStructures(world, rng) {
@@ -914,6 +949,14 @@
         r = 158 * gg; g = 120 * gg; b = 78 * gg;
         if (grain < 0.05) { r = 96; g = 70; b = 45; }
       }
+    } else if (block === CACTUS) {
+      if (ny > 0) {
+        gg = 0.94 + grain * 0.10;
+        r = 82 * gg; g = 148 * gg; b = 78 * gg;
+      } else {
+        var ridge = 0.5 + 0.5 * Math.sin(u * 26 + grain * 2.2);
+        r = 48 + ridge * 18; g = 108 + ridge * 26; b = 54 + ridge * 16;
+      }
     } else if (block === WOOD) {
       if (ny) {
         var rr = Math.hypot(u - 0.5, v - 0.5);
@@ -1258,6 +1301,7 @@
   global.VT = {
     AIR: AIR, GRASS: GRASS, DIRT: DIRT, STONE: STONE, WATER: WATER,
     WOOD: WOOD, LEAVES: LEAVES, SAND: SAND, SNOW: SNOW, PLANK: PLANK,
+    CACTUS: CACTUS,
     BIOME_PLAINS: BIOME_PLAINS, BIOME_FOREST: BIOME_FOREST,
     BIOME_SAVANNA: BIOME_SAVANNA, BIOME_DESERT: BIOME_DESERT,
     BIOME_NAMES: BIOME_NAMES,

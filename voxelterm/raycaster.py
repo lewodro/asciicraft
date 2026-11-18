@@ -251,6 +251,14 @@ class RaycastRenderer:
                 base = (158 * g, 120 * g, 78 * g)
                 if grain < 0.05:
                     base = (96, 70, 45)
+        elif block == blocks.CACTUS:
+            if ny > 0:
+                g = 0.94 + grain * 0.10
+                base = (82 * g, 148 * g, 78 * g)
+            else:
+                ridge = 0.5 + 0.5 * math.sin(u * 26.0 + grain * 2.2)
+                base = (48 + ridge * 18.0, 108 + ridge * 26.0,
+                        54 + ridge * 16.0)
         elif block == blocks.WOOD:
             if ny:
                 rr = math.hypot(u - 0.5, v - 0.5)
