@@ -118,6 +118,10 @@ class Game:
         self.top_pad = 0
         self.hud_row: int | None = None
         self.running = True
+        # Arrow-key look accelerates instead of snapping, then glides to a
+        # stop on release.  Same exponential response as the walk velocity.
+        self.look_yaw_v = 0.0
+        self.look_pitch_v = 0.0
         self.fps = 0.0
         self._fps_accum = 0.0
         self._fps_frames = 0
@@ -305,9 +309,13 @@ class Game:
             cam.move(dt, forward, strafe, vertical, self.world, sprint)
             look_y = (1.0 if kb.held("right", now) else 0.0) - (1.0 if kb.held("left", now) else 0.0)
             look_p = (1.0 if kb.held("up", now) else 0.0) - (1.0 if kb.held("down", now) else 0.0)
-            if look_y or look_p:
-                cam.look(look_y * dt * 1.30 * self.look_scale,
-                         look_p * dt * 0.95 * self.look_scale)
+            target_yaw = look_y * 1.45 * self.look_scale
+            target_pitch = look_p * 1.05 * self.look_scale
+            response = 1.0 - math.exp(-18.0 * dt)
+            self.look_yaw_v += (target_yaw - self.look_yaw_v) * response
+            self.look_pitch_v += (target_pitch - self.look_pitch_v) * response
+            if abs(self.look_yaw_v) > 1e-4 or abs(self.look_pitch_v) > 1e-4:
+                cam.look(self.look_yaw_v * dt, self.look_pitch_v * dt)
 
             t0 = time.perf_counter()
             frame = self._render_frame(now)

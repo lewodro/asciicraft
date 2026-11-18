@@ -152,6 +152,9 @@
   var fps = 0;
   var fpsAccum = 0;
   var fpsFrames = 0;
+  // Arrow-key look ramps up and glides out, mirroring the Python app.
+  var lookYawV = 0;
+  var lookPitchV = 0;
   var colorCache = new Map();
   var dragging = false;
   // The intro card is part of the experience: keep it up long enough to read
@@ -242,6 +245,8 @@
     generating = true;
     paused = true;
     held = Object.create(null);
+    lookYawV = 0;
+    lookPitchV = 0;
     if (revealTimer) { clearTimeout(revealTimer); revealTimer = 0; }
     seed = nextSeed >>> 0;
     seedInput.value = String(seed);
@@ -466,6 +471,8 @@
       if (splashHold > performance.now()) return;
       paused = !paused;
       held = Object.create(null);
+    lookYawV = 0;
+    lookPitchV = 0;
       if (paused) {
         showOverlay("Paused. Seed " + seed + " — " + MODE_LABEL[mode] + ".",
                     true);
@@ -497,6 +504,8 @@
 
   window.addEventListener("blur", function () {
     held = Object.create(null);
+    lookYawV = 0;
+    lookPitchV = 0;
     dragging = false;
   });
 
@@ -555,9 +564,13 @@
     camera.move(dt, forward, strafe, vertical, world, !!held.e);
     var lookY = (held.arrowright ? 1 : 0) - (held.arrowleft ? 1 : 0);
     var lookP = (held.arrowup ? 1 : 0) - (held.arrowdown ? 1 : 0);
-    if (lookY || lookP) {
-      camera.look(lookY * dt * 1.30 * lookScale,
-                  lookP * dt * 0.95 * lookScale);
+    var targetYaw = lookY * 1.45 * lookScale;
+    var targetPitch = lookP * 1.05 * lookScale;
+    var lookResponse = 1 - Math.exp(-18 * dt);
+    lookYawV += (targetYaw - lookYawV) * lookResponse;
+    lookPitchV += (targetPitch - lookPitchV) * lookResponse;
+    if (Math.abs(lookYawV) > 1e-4 || Math.abs(lookPitchV) > 1e-4) {
+      camera.look(lookYawV * dt, lookPitchV * dt);
     }
 
     var t0 = performance.now();
