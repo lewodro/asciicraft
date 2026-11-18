@@ -12,15 +12,16 @@
 
   // ---------------------------------------------------------------- blocks
   var AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WATER = 4,
-      WOOD = 5, LEAVES = 6, SAND = 7, SNOW = 8, PLANK = 9, CACTUS = 10;
+      WOOD = 5, LEAVES = 6, SAND = 7, SNOW = 8, PLANK = 9, CACTUS = 10,
+      ORE = 11;
 
   // Surface biomes; mirrors world.py.
   var BIOME_PLAINS = 0, BIOME_FOREST = 1, BIOME_SAVANNA = 2, BIOME_DESERT = 3;
   var BIOME_NAMES = ["plains", "forest", "savanna", "desert"];
   var BIOME_STRIDE = 4;
 
-  var OCCLUDERS = new Uint8Array(11);
-  [GRASS, DIRT, STONE, WOOD, SAND, SNOW, PLANK, CACTUS].forEach(function (b) { OCCLUDERS[b] = 1; });
+  var OCCLUDERS = new Uint8Array(12);
+  [GRASS, DIRT, STONE, WOOD, SAND, SNOW, PLANK, CACTUS, ORE].forEach(function (b) { OCCLUDERS[b] = 1; });
 
   var FACE_LIGHT = {
     "0,1,0": 1.00, "0,-1,0": 0.44,
@@ -382,6 +383,8 @@
       }
     }
 
+    decorateCaves(this);
+
     // 3. Trees on a jittered lattice.
     var occupied = new Set();
     for (var gx = 4; gx < width - 4; gx += 5) {
@@ -442,6 +445,44 @@
     this.genTime = (ended - started) / 1000;
     return this;
   };
+
+  function decorateCaves(world) {
+    var width = world.width, depth = world.depth, height = world.height;
+    var grid = world.grid, heights = world.heightMap;
+    var step = 4;
+    var dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    for (var y = 3; y < height - 3; y += step) {
+      for (var z = 2; z < depth - 2; z += step) {
+        for (var x = 2; x < width - 2; x += step) {
+          if (y >= heights[x + width * z] - 2) continue;
+          var idx = x + width * (z + depth * y);
+          if (grid[idx] !== AIR) continue;
+          var up = grid[x + width * (z + depth * (y + 1))];
+          var down = grid[x + width * (z + depth * (y - 1))];
+          if (scatter(x, y, z, 0) < 0.30) {
+            for (var d = 0; d < 6; d++) {
+              var nx = x + dirs[d][0], ny = y + dirs[d][1], nz = z + dirs[d][2];
+              var nidx = nx + width * (nz + depth * ny);
+              if (grid[nidx] !== STONE) continue;
+              if (scatter(nx, ny, nz, 1) < 0.09) grid[nidx] = ORE;
+            }
+          }
+          var h = scatter(x, y, z, 2);
+          if (down !== AIR && up === AIR && h < 0.045) {
+            grid[idx] = STONE;
+            if (h < 0.010 && grid[x + width * (z + depth * (y + 1))] === AIR) {
+              grid[x + width * (z + depth * (y + 1))] = STONE;
+            }
+          } else if (up !== AIR && down === AIR && h < 0.040) {
+            grid[idx] = STONE;
+            if (h < 0.009 && grid[x + width * (z + depth * (y - 1))] === AIR) {
+              grid[x + width * (z + depth * (y - 1))] = STONE;
+            }
+          }
+        }
+      }
+    }
+  }
 
   function growTree(world, x, ground, z, rng) {
     var trunkH = rng.randrange(4, 8);
@@ -776,6 +817,15 @@
     return (n & 0xFFFFFF) / 16777216;
   }
 
+  function scatter(x, y, z, salt) {
+    salt = salt || 0;
+    var n = (Math.imul(x, 374761393) + Math.imul(y, 668265263) +
+             Math.imul(z, 1442695041) + Math.imul(salt, 2654435761)) >>> 0;
+    n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+    n ^= n >>> 16;
+    return (n & 0xFFFFFF) / 16777216;
+  }
+
   function clampByte(v) {
     if (v <= 0) return 0;
     if (v >= 255) return 255;
@@ -956,6 +1006,15 @@
       } else {
         var ridge = 0.5 + 0.5 * Math.sin(u * 26 + grain * 2.2);
         r = 48 + ridge * 18; g = 108 + ridge * 26; b = 54 + ridge * 16;
+      }
+    } else if (block === ORE) {
+      gg = 0.80 + grain * 0.26;
+      r = 102 * gg; g = 97 * gg; b = 92 * gg;
+      var fleck = hash3(bx * 13 + Math.trunc(u * 37),
+                        by * 17 + Math.trunc(v * 37), bz * 19);
+      if (fleck > 0.58) {
+        if (fleck > 0.82) { r = 206; g = 168; b = 74; }
+        else { r = 158; g = 124; b = 52; }
       }
     } else if (block === WOOD) {
       if (ny) {
@@ -1301,7 +1360,7 @@
   global.VT = {
     AIR: AIR, GRASS: GRASS, DIRT: DIRT, STONE: STONE, WATER: WATER,
     WOOD: WOOD, LEAVES: LEAVES, SAND: SAND, SNOW: SNOW, PLANK: PLANK,
-    CACTUS: CACTUS,
+    CACTUS: CACTUS, ORE: ORE,
     BIOME_PLAINS: BIOME_PLAINS, BIOME_FOREST: BIOME_FOREST,
     BIOME_SAVANNA: BIOME_SAVANNA, BIOME_DESERT: BIOME_DESERT,
     BIOME_NAMES: BIOME_NAMES,

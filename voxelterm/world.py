@@ -26,6 +26,15 @@ BIOME_NAMES = ("plains", "forest", "savanna", "desert")
 BIOME_STRIDE = 4
 
 
+def _scatter(x: int, y: int, z: int, salt: int = 0) -> float:
+    """Deterministic hash -> [0, 1), used for decoration without RNG state."""
+    n = (x * 374761393 + y * 668265263 + z * 1442695041
+         + salt * 2654435761) & 0xFFFFFFFF
+    n = ((n ^ (n >> 13)) * 1274126177) & 0xFFFFFFFF
+    n ^= n >> 16
+    return (n & 0xFFFFFF) / 16777216.0
+
+
 class World:
     """A finite, deterministic Perlin-noise voxel island.
 
@@ -224,6 +233,13 @@ class World:
                                     grid[idx] = blocks.AIR
 
         self.timings["caves"] = time.perf_counter() - mark
+        mark = time.perf_counter()
+
+        # 2b. Dripstone and ore.  Sparse decoration makes tunnels feel like
+        #     places rather than smooth tubes: short stalagmites/stalactites
+        #     and gold-flecked ore exposed on cave walls.
+        self._decorate_caves()
+        self.timings["cave_detail"] = time.perf_counter() - mark
         mark = time.perf_counter()
 
         # 3. Trees.  A jittered lattice gives pleasing spacing without an
@@ -459,6 +475,46 @@ class World:
             phase = rng.random() * math.tau
             radius = 0.22 + rng.random() * 0.18
             self.entities.append((float(x), y, float(z), orbit, spin, phase, radius))
+
+    def _decorate_caves(self) -> None:
+        width, depth, height = self.width, self.depth, self.height
+        grid = self.grid
+        heights = self.height_map
+        step = 4
+        for y in range(3, height - 3, step):
+            for z in range(2, depth - 2, step):
+                for x in range(2, width - 2, step):
+                    if y >= heights[x + width * z] - 2:
+                        continue
+                    idx = x + width * (z + depth * y)
+                    if grid[idx] != blocks.AIR:
+                        continue
+                    up = grid[x + width * (z + depth * (y + 1))]
+                    down = grid[x + width * (z + depth * (y - 1))]
+
+                    # Exposed ore veins on neighbouring stone.
+                    if _scatter(x, y, z, 0) < 0.30:
+                        for ox, oy, oz in ((1, 0, 0), (-1, 0, 0),
+                                           (0, 1, 0), (0, -1, 0),
+                                           (0, 0, 1), (0, 0, -1)):
+                            nx = x + ox
+                            ny = y + oy
+                            nz = z + oz
+                            nidx = nx + width * (nz + depth * ny)
+                            if grid[nidx] != blocks.STONE:
+                                continue
+                            if _scatter(nx, ny, nz, 1) < 0.09:
+                                grid[nidx] = blocks.ORE
+
+                    h = _scatter(x, y, z, 2)
+                    if down != blocks.AIR and up == blocks.AIR and h < 0.045:
+                        grid[idx] = blocks.STONE
+                        if h < 0.010 and grid[x + width * (z + depth * (y + 1))] == blocks.AIR:
+                            grid[x + width * (z + depth * (y + 1))] = blocks.STONE
+                    elif up != blocks.AIR and down == blocks.AIR and h < 0.040:
+                        grid[idx] = blocks.STONE
+                        if h < 0.009 and grid[x + width * (z + depth * (y - 1))] == blocks.AIR:
+                            grid[x + width * (z + depth * (y - 1))] = blocks.STONE
 
     def _grow_cactus(self, x: int, ground: int, z: int,
                      rng: random.Random) -> None:

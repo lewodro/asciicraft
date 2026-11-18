@@ -14,6 +14,7 @@ SAND = 7
 SNOW = 8
 PLANK = 9
 CACTUS = 10
+ORE = 11
 
 BLOCK_NAMES = {
     AIR: "air",
@@ -27,6 +28,7 @@ BLOCK_NAMES = {
     SNOW: "snow",
     PLANK: "plank",
     CACTUS: "cactus",
+    ORE: "ore",
 }
 
 # Lighting is deliberately stylised, not physically correct.  The strong
@@ -43,4 +45,4 @@ FACE_LIGHT = {
 }
 
 # Blocks that fully occlude a neighbouring face.
-OCCLUDERS = frozenset((GRASS, DIRT, STONE, WOOD, SAND, SNOW, PLANK, CACTUS))
+OCCLUDERS = frozenset((GRASS, DIRT, STONE, WOOD, SAND, SNOW, PLANK, CACTUS, ORE))

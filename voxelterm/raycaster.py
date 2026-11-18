@@ -259,6 +259,13 @@ class RaycastRenderer:
                 ridge = 0.5 + 0.5 * math.sin(u * 26.0 + grain * 2.2)
                 base = (48 + ridge * 18.0, 108 + ridge * 26.0,
                         54 + ridge * 16.0)
+        elif block == blocks.ORE:
+            g = 0.80 + grain * 0.26
+            base = (102 * g, 97 * g, 92 * g)
+            fleck = _hash3(bx * 13 + int(u * 37.0),
+                           by * 17 + int(v * 37.0), bz * 19)
+            if fleck > 0.58:
+                base = (206, 168, 74) if fleck > 0.82 else (158, 124, 52)
         elif block == blocks.WOOD:
             if ny:
                 rr = math.hypot(u - 0.5, v - 0.5)
