@@ -118,6 +118,8 @@ class Game:
         self.top_pad = 0
         self.hud_row: int | None = None
         self.running = True
+        # Landmark indices the player has walked up to, for the HUD counter.
+        self.visited: set[int] = set()
         # Arrow-key look accelerates instead of snapping, then glides to a
         # stop on release.  Same exponential response as the walk velocity.
         self.look_yaw_v = 0.0
@@ -189,10 +191,14 @@ class Game:
         # Find the closest landmark so players have a destination to steer by.
         nearest = None
         best = float("inf")
-        for cx, cz, kind in world.structures:
+        for index, (cx, cz, kind) in enumerate(world.structures):
             dx = cx - cam.x
             dz = cz - cam.z
             dist = math.hypot(dx, dz)
+            # Walking up to a site counts it as explored.  The set survives
+            # mode changes and only resets when a new world is generated.
+            if dist < 14.0:
+                self.visited.add(index)
             if dist < best:
                 best = dist
                 if abs(dx) >= abs(dz):
@@ -201,6 +207,11 @@ class Game:
                     arrow = "S" if dz >= 0.0 else "N"
                 nearest = f"{kind} {dist:.0f}m {arrow}"
         here = f"{biome} {cam.y - ground:+.0f}m"
+        if world.structures:
+            found = len(self.visited)
+            here += f" | sites {found}/{len(world.structures)}"
+            if found == len(world.structures):
+                here += " all"
         if nearest is not None:
             here += f" | {nearest}"
         left = (f" AC {self.fps:4.1f}fps | seed {self.seed} | {mode} | "
@@ -240,6 +251,7 @@ class Game:
         self.session.write(CLEAR + f"Generating {w}x{d} world (seed {new_seed})...")
         self.world = World(new_seed, *self.dims).generate()
         self.seed = new_seed
+        self.visited.clear()
         self.camera = _make_camera(self.world, self.fov)
         self._configure_renderer()
         self.session.clear()
