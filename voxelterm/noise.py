@@ -5,10 +5,7 @@ from __future__ import annotations
 import math
 import random
 
-_FADE = [0.0] * 1024
-for _i in range(1024):
-    _t = _i / 1023.0
-    _FADE[_i] = _t * _t * _t * (_t * (_t * 6.0 - 15.0) + 10.0)
+_floor = math.floor
 
 _GRAD2 = (
     (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0),
@@ -16,10 +13,24 @@ _GRAD2 = (
 )
 
 
-def _fade(t: float) -> float:
-    # 6t^5 - 15t^4 + 10t^3.  The lookup above is a fast approximation helper
-    # but the polynomial is cheap and more accurate, so use it directly.
-    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+def _grad3_table() -> tuple[tuple[float, float, float], ...]:
+    """Expand the gradient cases into (x, y, z) coefficients once."""
+    table = []
+    for h in range(16):
+        coeff = [0.0, 0.0, 0.0]
+        coeff[0 if h < 8 else 1] = 1.0 if (h & 1) == 0 else -1.0
+        if h < 4:
+            axis = 1
+        elif h in (12, 14):
+            axis = 0
+        else:
+            axis = 2
+        coeff[axis] += 1.0 if (h & 2) == 0 else -1.0
+        table.append(tuple(coeff))
+    return tuple(table)
+
+
+_GRAD3 = _grad3_table()
 
 
 class PerlinNoise:
@@ -36,12 +47,14 @@ class PerlinNoise:
 
     def noise2(self, x: float, y: float) -> float:
         p = self.perm
-        xi = int(math.floor(x)) & 255
-        yi = int(math.floor(y)) & 255
-        xf = x - math.floor(x)
-        yf = y - math.floor(y)
-        u = _fade(xf)
-        v = _fade(yf)
+        fx = _floor(x)
+        fy = _floor(y)
+        xi = int(fx) & 255
+        yi = int(fy) & 255
+        xf = x - fx
+        yf = y - fy
+        u = xf * xf * xf * (xf * (xf * 6.0 - 15.0) + 10.0)
+        v = yf * yf * yf * (yf * (yf * 6.0 - 15.0) + 10.0)
 
         aa = p[p[xi] + yi]
         ab = p[p[xi] + yi + 1]
@@ -49,40 +62,33 @@ class PerlinNoise:
         bb = p[p[xi + 1] + yi + 1]
 
         g = _GRAD2
-        x1 = g[aa & 7][0] * xf + g[aa & 7][1] * yf
-        x2 = g[ba & 7][0] * (xf - 1.0) + g[ba & 7][1] * yf
-        y1 = g[ab & 7][0] * xf + g[ab & 7][1] * (yf - 1.0)
-        y2 = g[bb & 7][0] * (xf - 1.0) + g[bb & 7][1] * (yf - 1.0)
+        ga = g[aa & 7]
+        gb = g[ba & 7]
+        gc = g[ab & 7]
+        gd = g[bb & 7]
+        x1 = ga[0] * xf + ga[1] * yf
+        x2 = gb[0] * (xf - 1.0) + gb[1] * yf
+        y1 = gc[0] * xf + gc[1] * (yf - 1.0)
+        y2 = gd[0] * (xf - 1.0) + gd[1] * (yf - 1.0)
 
         xa = x1 + u * (x2 - x1)
         xb = y1 + u * (y2 - y1)
         return xa + v * (xb - xa)
 
-    def _grad3(self, h: int, x: float, y: float, z: float) -> float:
-        h &= 15
-        u = x if h < 8 else y
-        if h < 4:
-            v = y
-        elif h in (12, 14):
-            v = x
-        else:
-            v = z
-        return (u if (h & 1) == 0 else -u) + (v if (h & 2) == 0 else -v)
-
     def noise3(self, x: float, y: float, z: float) -> float:
         p = self.perm
-        fx = math.floor(x)
-        fy = math.floor(y)
-        fz = math.floor(z)
+        fx = _floor(x)
+        fy = _floor(y)
+        fz = _floor(z)
         xi = int(fx) & 255
         yi = int(fy) & 255
         zi = int(fz) & 255
         xf = x - fx
         yf = y - fy
         zf = z - fz
-        u = _fade(xf)
-        v = _fade(yf)
-        w = _fade(zf)
+        u = xf * xf * xf * (xf * (xf * 6.0 - 15.0) + 10.0)
+        v = yf * yf * yf * (yf * (yf * 6.0 - 15.0) + 10.0)
+        w = zf * zf * zf * (zf * (zf * 6.0 - 15.0) + 10.0)
 
         a = p[xi] + yi
         aa = p[a] + zi
@@ -91,19 +97,27 @@ class PerlinNoise:
         ba = p[b] + zi
         bb = p[b + 1] + zi
 
-        g = self._grad3
-        x1 = g(p[aa], xf, yf, zf)
-        x2 = g(p[ba], xf - 1.0, yf, zf)
-        x3 = g(p[ab], xf, yf - 1.0, zf)
-        x4 = g(p[bb], xf - 1.0, yf - 1.0, zf)
+        g = _GRAD3
+        gt = g[p[aa] & 15]
+        x1 = gt[0] * xf + gt[1] * yf + gt[2] * zf
+        gt = g[p[ba] & 15]
+        x2 = gt[0] * (xf - 1.0) + gt[1] * yf + gt[2] * zf
+        gt = g[p[ab] & 15]
+        x3 = gt[0] * xf + gt[1] * (yf - 1.0) + gt[2] * zf
+        gt = g[p[bb] & 15]
+        x4 = gt[0] * (xf - 1.0) + gt[1] * (yf - 1.0) + gt[2] * zf
         y1 = x1 + u * (x2 - x1)
         y2 = x3 + u * (x4 - x3)
         z1 = y1 + v * (y2 - y1)
 
-        x1 = g(p[aa + 1], xf, yf, zf - 1.0)
-        x2 = g(p[ba + 1], xf - 1.0, yf, zf - 1.0)
-        x3 = g(p[ab + 1], xf, yf - 1.0, zf - 1.0)
-        x4 = g(p[bb + 1], xf - 1.0, yf - 1.0, zf - 1.0)
+        gt = g[p[aa + 1] & 15]
+        x1 = gt[0] * xf + gt[1] * yf + gt[2] * (zf - 1.0)
+        gt = g[p[ba + 1] & 15]
+        x2 = gt[0] * (xf - 1.0) + gt[1] * yf + gt[2] * (zf - 1.0)
+        gt = g[p[ab + 1] & 15]
+        x3 = gt[0] * xf + gt[1] * (yf - 1.0) + gt[2] * (zf - 1.0)
+        gt = g[p[bb + 1] & 15]
+        x4 = gt[0] * (xf - 1.0) + gt[1] * (yf - 1.0) + gt[2] * (zf - 1.0)
         y1 = x1 + u * (x2 - x1)
         y2 = x3 + u * (x4 - x3)
         z2 = y1 + v * (y2 - y1)

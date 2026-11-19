@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import multiprocessing as mp
+import os
 import random
 
 from . import blocks
@@ -33,6 +35,97 @@ def _scatter(x: int, y: int, z: int, salt: int = 0) -> float:
     n = ((n ^ (n >> 13)) * 1274126177) & 0xFFFFFFFF
     n ^= n >> 16
     return (n & 0xFFFFFF) / 16777216.0
+
+
+def _generation_workers() -> int:
+    override = os.environ.get("VOXELTERM_GEN_WORKERS")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    if not hasattr(os, "fork"):
+        return 1
+    return max(1, min(6, os.cpu_count() or 1))
+
+
+def _z_bands(depth: int, workers: int) -> list[tuple[int, int]]:
+    count = max(1, min(workers, depth))
+    step = (depth + count - 1) // count
+    return [(z0, min(depth, z0 + step))
+            for z0 in range(0, depth, step)]
+
+
+def _generate_surface(job) -> tuple[bytes, bytes]:
+    """Build the heightfield and filled columns for one z band.
+
+    Each band is a pure function of (seed, biome map, band bounds), so the
+    bands can be generated in forked workers and merged without changing a
+    single voxel.  Returns (height map slice, voxel slab).
+    """
+    seed, width, depth, height, sea, biomes, z0, z1 = job
+    noise = PerlinNoise(seed)
+    band_depth = z1 - z0
+    local_stride = width * band_depth
+    heights = bytearray(width * band_depth)
+    piece = bytearray(local_stride * height)
+    water_block = bytes((blocks.WATER,))
+    profiles: dict[tuple[int, int], bytes] = {}
+
+    for z in range(z0, z1):
+        lz = z - z0
+        for x in range(width):
+            wx = x + noise.noise2(x * 0.019 + 7.1, z * 0.019 - 2.3) * 9.0
+            wz = z + noise.noise2(x * 0.019 - 4.7, z * 0.019 + 8.9) * 9.0
+            continental = noise.fbm2(wx * 0.0074 + 11.2, wz * 0.0074 - 3.7, 5)
+            hills = noise.fbm2(x * 0.029 - 8.0, z * 0.029 + 4.0, 4)
+            ridge_field = noise.fbm2(x * 0.0112 + 21.3, z * 0.0112 - 9.1, 3)
+            ridge = max(0.0, (1.0 - abs(ridge_field)) - 0.65) / 0.35
+            mountain = (ridge ** 1.8) * 28.0
+            detail = noise.noise2(x * 0.13 + 3.0, z * 0.13 - 6.0)
+            h = (sea - 6.0 + continental * 24.0 + hills * 4.0
+                 + mountain + detail * 0.8)
+            h = max(6, min(height - 10, int(round(h))))
+            heights[x + width * lz] = h
+
+            top_block = blocks.GRASS
+            if h >= 50:
+                top_block = blocks.SNOW
+            elif h <= sea + 1 or biomes[x + width * z] == BIOME_DESERT:
+                top_block = blocks.SAND
+
+            # Each column's vertical profile depends only on its height and
+            # top material, so build it once per combination and copy it in
+            # with a strided slice.  This moves the per-voxel loop into C.
+            key = (top_block, h)
+            profile = profiles.get(key)
+            if profile is None:
+                column = bytearray(h + 1)
+                for y in range(0, h + 1):
+                    if y == h:
+                        block = top_block
+                    elif top_block == blocks.SNOW:
+                        block = blocks.SNOW if y >= h - 2 else blocks.STONE
+                    elif top_block == blocks.SAND:
+                        block = blocks.SAND if y >= h - 2 else blocks.STONE
+                    elif y >= h - 3:
+                        block = blocks.DIRT
+                    else:
+                        block = blocks.STONE
+                    column[y] = block
+                profile = bytes(column)
+                profiles[key] = profile
+
+            start = x + width * lz
+            piece[start:start + (h + 1) * local_stride:local_stride] = profile
+
+            # Fill lakes and the surrounding ocean.
+            if h < sea:
+                fill = sea - h
+                piece[start + (h + 1) * local_stride:
+                      start + (h + 1 + fill) * local_stride:local_stride] = (
+                    water_block * fill)
+    return bytes(heights), bytes(piece)
 
 
 class World:
@@ -156,46 +249,31 @@ class World:
 
         # 1. Height field: domain-warped continents, rolling hills and a broad
         #    ridged mountain mask.  This is intentionally more interesting than
-        #    a single fBm octave stack.
-        for z in range(depth):
-            for x in range(width):
-                wx = x + noise.noise2(x * 0.019 + 7.1, z * 0.019 - 2.3) * 9.0
-                wz = z + noise.noise2(x * 0.019 - 4.7, z * 0.019 + 8.9) * 9.0
-                continental = noise.fbm2(wx * 0.0074 + 11.2, wz * 0.0074 - 3.7, 5)
-                hills = noise.fbm2(x * 0.029 - 8.0, z * 0.029 + 4.0, 4)
-                ridge_field = noise.fbm2(x * 0.0112 + 21.3, z * 0.0112 - 9.1, 3)
-                ridge = max(0.0, (1.0 - abs(ridge_field)) - 0.65) / 0.35
-                mountain = (ridge ** 1.8) * 28.0
-                detail = noise.noise2(x * 0.13 + 3.0, z * 0.13 - 6.0)
-                h = (sea - 6.0 + continental * 24.0 + hills * 4.0
-                     + mountain + detail * 0.8)
-                h = max(6, min(height - 10, int(round(h))))
-                heights[x + width * z] = h
-
-                top_block = blocks.GRASS
-                if h >= 50:
-                    top_block = blocks.SNOW
-                elif h <= sea + 1 or biomes[x + width * z] == BIOME_DESERT:
-                    top_block = blocks.SAND
-
-                for y in range(0, h + 1):
-                    if y == h:
-                        block = top_block
-                    elif top_block == blocks.SNOW:
-                        block = blocks.SNOW if y >= h - 2 else blocks.STONE
-                    elif top_block == blocks.SAND:
-                        block = blocks.SAND if y >= h - 2 else blocks.STONE
-                    elif y >= h - 3:
-                        block = blocks.DIRT
-                    else:
-                        block = blocks.STONE
-                    grid[x + width * (z + depth * y)] = block
-
-                # Fill lakes and the surrounding ocean.
-                if h < sea:
-                    water_top = sea
-                    for y in range(h + 1, water_top + 1):
-                        grid[x + width * (z + depth * y)] = blocks.WATER
+        #    a single fBm octave stack.  Bands of z columns are independent, so
+        #    fork workers over them and merge the slabs afterwards.
+        workers = _generation_workers()
+        if workers > 1 and width * depth * height >= 500_000:
+            bands = _z_bands(depth, workers)
+        else:
+            bands = [(0, depth)]
+        jobs = [(self.seed, width, depth, height, sea, bytes(biomes), z0, z1)
+                for z0, z1 in bands]
+        if len(jobs) > 1:
+            try:
+                ctx = mp.get_context("fork")
+                with ctx.Pool(len(jobs)) as pool:
+                    results = pool.map(_generate_surface, jobs)
+            except (OSError, RuntimeError, ValueError):
+                results = [_generate_surface(job) for job in jobs]
+        else:
+            results = [_generate_surface(jobs[0])]
+        for (z0, z1), (hbytes, piece) in zip(bands, results):
+            heights[z0 * width:z1 * width] = list(hbytes)
+            band_row = width * (z1 - z0)
+            for y in range(height):
+                src = y * band_row
+                dst = y * width * depth + z0 * width
+                grid[dst:dst + band_row] = piece[src:src + band_row]
 
         self.timings["height"] = time.perf_counter() - mark
         mark = time.perf_counter()
@@ -208,29 +286,43 @@ class World:
         #    carved volume stays almost identical at terminal resolution.
         cave_step = 3
         reach = cave_step - 1
+        noise3 = noise.noise3
+        carve = b"\x00\x00\x00"
         for z in range(2, depth - 3, cave_step):
+            z1 = z * 0.055
+            z2 = z * 0.105 - 19.0
+            z3 = z * 0.022 - 45.0
             for x in range(2, width - 3, cave_step):
                 h = heights[x + width * z]
                 upper = min(h - 2, height - 2 - reach)
+                top = min(h - 2, height - 2)
+                x1 = x * 0.055
+                x2 = x * 0.105 + 31.0
+                x3 = x * 0.022 + 91.0
                 for y in range(3, upper + 1, cave_step):
-                    c1 = noise.noise3(x * 0.055, y * 0.075, z * 0.055)
-                    c2 = noise.noise3(x * 0.105 + 31.0, y * 0.135 + 17.0,
-                                      z * 0.105 - 19.0)
-                    cavern = noise.noise3(x * 0.022 + 91.0, y * 0.041,
-                                          z * 0.022 - 45.0)
+                    c1 = noise3(x1, y * 0.075, z1)
+                    c2 = noise3(x2, y * 0.135 + 17.0, z2)
+                    cavern = noise3(x3, y * 0.041, z3)
                     if not (c1 * c1 + c2 * c2 * 1.35 < 0.0038 or cavern > 0.45):
                         continue
                     for dy in range(cave_step):
                         yy = y + dy
-                        if yy > min(h - 2, height - 2):
+                        if yy > top:
                             continue
+                        base = width * (z + depth * yy) + x
                         for dz in range(cave_step):
-                            zz = z + dz
-                            for dx in range(cave_step):
-                                xx = x + dx
-                                idx = xx + width * (zz + depth * yy)
-                                if grid[idx] != 0 and grid[idx] != blocks.WATER:
-                                    grid[idx] = blocks.AIR
+                            start = base + width * dz
+                            # The 3-wide stamp can cross into a neighbouring
+                            # column whose lake surface sits above this one, so
+                            # never erode water.
+                            if (grid[start] == blocks.WATER
+                                    or grid[start + 1] == blocks.WATER
+                                    or grid[start + 2] == blocks.WATER):
+                                for dx in range(cave_step):
+                                    if grid[start + dx] != blocks.WATER:
+                                        grid[start + dx] = blocks.AIR
+                            else:
+                                grid[start:start + cave_step] = carve
 
         self.timings["caves"] = time.perf_counter() - mark
         mark = time.perf_counter()
