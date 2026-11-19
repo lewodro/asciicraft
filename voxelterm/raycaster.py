@@ -320,21 +320,19 @@ class RaycastRenderer:
 
         return base
 
-    def _macro_entry(self, ox: float, oy: float, oz: float,
+    def _macro_entry(self, mx: int, my: int, mz: int,
+                     ox: float, oy: float, oz: float,
                      dx: float, dy: float, dz: float) -> float:
-        """Coarse DDA: return the first distance where an occupied 8^3 cell starts."""
+        """Coarse DDA: return the first distance where an occupied 8^3 cell starts.
+
+        The caller has already resolved and bounds-checked the current (empty)
+        macro cell, so start stepping from it directly.
+        """
         world = self.world
         macro = world.macro
         mw, md, mh = world.macro_dims
         ms = world.macro_size
-        mx = int(ox) // ms
-        my = int(oy) // ms
-        mz = int(oz) // ms
-        if mx < 0 or mx >= mw or my < 0 or my >= mh or mz < 0 or mz >= md:
-            return -1.0
         midx = mx + mw * (mz + md * my)
-        if macro[midx]:
-            return 0.0
 
         step_x = 1 if dx > 0.0 else -1
         step_y = 1 if dy > 0.0 else -1
@@ -561,7 +559,7 @@ class RaycastRenderer:
             mz = int(pz) // ms
             midx = mx + mw * (mz + md * my)
             if not macro[midx]:
-                delta = self._macro_entry(px, py, pz, dx, dy, dz)
+                delta = self._macro_entry(mx, my, mz, px, py, pz, dx, dy, dz)
                 if delta < 0.0:
                     return None
                 t += delta + 0.00001
@@ -600,13 +598,24 @@ class RaycastRenderer:
 
     # ---------------------------------------------------------------- tracing
     def render(self, time_seconds: float = 0.0) -> list[int]:
-        pixels = self.render_band(0, self.pixel_height, time_seconds)
+        pixels = self.render_rows(range(0, self.pixel_height), time_seconds)
         self.draw_entities(pixels, time_seconds)
         return pixels
 
     def render_band(self, y_start: int, y_end: int,
                     time_seconds: float = 0.0) -> list[int]:
-        """Render a horizontal band of pixel rows (used by worker processes)."""
+        """Render a contiguous horizontal band (kept for tools and tests)."""
+        y_start = max(0, min(self.pixel_height, int(y_start)))
+        y_end = max(y_start, min(self.pixel_height, int(y_end)))
+        return self.render_rows(range(y_start, y_end), time_seconds)
+
+    def render_rows(self, rows, time_seconds: float = 0.0) -> list[int]:
+        """Render the given pixel rows.
+
+        Rows are supplied one at a time so worker processes can take an
+        interleaved slice of the frame and stay balanced even when the sky and
+        the foreground cost very different amounts per row.
+        """
         cam = self.camera
         world = self.world
         grid = world.grid
@@ -626,70 +635,79 @@ class RaycastRenderer:
         c_arr = self.c_coeff
         a_arr = self.a_coeff
         b_arr = self.b_coeff
-        y_start = max(0, min(self.pixel_height, int(y_start)))
-        y_end = max(y_start, min(self.pixel_height, int(y_end)))
-        start_index = y_start * self.width
-        end_index = y_end * self.width
-        pixels = [0] * (end_index - start_index)
+        trace = self._trace
+        sky = self._sky
+        surface_color = self._surface_color
+        ambient = self._ambient_occlusion
+        clamp_byte = _clamp_byte
+        floor = math.floor
+        water = blocks.WATER
+        width = self.width
+        pixels = []
+        append = pixels.append
 
-        for i in range(start_index, end_index):
-            c = c_arr[i]
-            a = a_arr[i]
-            b = b_arr[i]
-            dx = fx * c + rx * a + ux * b
-            dy = fy * c + ry * a + uy * b
-            dz = fz * c + rz * a + uz * b
+        for row in rows:
+            base = row * width
+            for i in range(base, base + width):
+                c = c_arr[i]
+                a = a_arr[i]
+                b = b_arr[i]
+                dx = fx * c + rx * a + ux * b
+                dy = fy * c + ry * a + uy * b
+                dz = fz * c + rz * a + uz * b
 
-            hit = self._trace(ox, oy, oz, dx, dy, dz)
-            if hit is None:
-                r, g, bl = self._sky(dx, dy, dz)
-                pixels[i - start_index] = (int(r) << 16) | (int(g) << 8) | int(bl)
-                continue
+                hit = trace(ox, oy, oz, dx, dy, dz)
+                if hit is None:
+                    r, g, bl = sky(dx, dy, dz)
+                    append((int(r) << 16) | (int(g) << 8) | int(bl))
+                    continue
 
-            block, x, y, z, nx, ny, nz, dist = hit
-            normal = (nx, ny, nz)
-            hx = ox + dx * dist
-            hy = oy + dy * dist
-            hz = oz + dz * dist
-            if normal[0]:
-                u = hz - math.floor(hz)
-                v = hy - math.floor(hy)
-            elif normal[1]:
-                u = hx - math.floor(hx)
-                v = hz - math.floor(hz)
-            else:
-                u = hx - math.floor(hx)
-                v = hy - math.floor(hy)
-            # Guard against pathological 1.0 values at exact corners.
-            if u >= 1.0:
-                u = 0.999999
-            if v >= 1.0:
-                v = 0.999999
+                block, x, y, z, nx, ny, nz, dist = hit
+                normal = (nx, ny, nz)
+                hx = ox + dx * dist
+                hy = oy + dy * dist
+                hz = oz + dz * dist
+                if normal[0]:
+                    u = hz - floor(hz)
+                    v = hy - floor(hy)
+                elif normal[1]:
+                    u = hx - floor(hx)
+                    v = hz - floor(hz)
+                else:
+                    u = hx - floor(hx)
+                    v = hy - floor(hy)
+                # Guard against pathological 1.0 values at exact corners.
+                if u >= 1.0:
+                    u = 0.999999
+                if v >= 1.0:
+                    v = 0.999999
 
-            color = self._surface_color(block, normal[0], normal[1], normal[2],
-                                        u, v, x, y, z, time_seconds)
-            light = face_light.get(normal, 0.8)
-            if block != blocks.WATER:
-                light *= self._ambient_occlusion(
-                    x, y, z, normal[0], normal[1], normal[2], u, v)
-            r = color[0] * light
-            g = color[1] * light
-            bl = color[2] * light
+                color = surface_color(block, normal[0], normal[1], normal[2],
+                                      u, v, x, y, z, time_seconds)
+                light = face_light.get(normal, 0.8)
+                if block != water:
+                    light *= ambient(x, y, z, normal[0], normal[1], normal[2],
+                                     u, v)
+                r = color[0] * light
+                g = color[1] * light
+                bl = color[2] * light
 
-            # Stay away from the material's own luminance, then expose.
-            lum = 0.2126 * r + 0.7152 * g + 0.0722 * bl
-            r = (lum + (r - lum) * _SATURATION) * _EXPOSURE
-            g = (lum + (g - lum) * _SATURATION) * _EXPOSURE
-            bl = (lum + (bl - lum) * _SATURATION) * _EXPOSURE
+                # Stay away from the material's own luminance, then expose.
+                lum = 0.2126 * r + 0.7152 * g + 0.0722 * bl
+                r = (lum + (r - lum) * _SATURATION) * _EXPOSURE
+                g = (lum + (g - lum) * _SATURATION) * _EXPOSURE
+                bl = (lum + (bl - lum) * _SATURATION) * _EXPOSURE
 
-            fog = 1.0 - math.exp(-(dist / fog_dist) ** 2)
-            if fog > 0.0:
-                sr, sg, sb = self._sky(dx, dy, dz)
-                r = r * (1.0 - fog) + sr * fog
-                g = g * (1.0 - fog) + sg * fog
-                bl = bl * (1.0 - fog) + sb * fog
+                fog = 1.0 - math.exp(-(dist / fog_dist) ** 2)
+                if fog > 0.0:
+                    sr, sg, sb = sky(dx, dy, dz)
+                    r = r * (1.0 - fog) + sr * fog
+                    g = g * (1.0 - fog) + sg * fog
+                    bl = bl * (1.0 - fog) + sb * fog
 
-            pixels[i - start_index] = (_clamp_byte(r) << 16) | (_clamp_byte(g) << 8) | _clamp_byte(bl)
+                append((clamp_byte(r) << 16)
+                       | (clamp_byte(g) << 8)
+                       | clamp_byte(bl))
 
         return pixels
 

@@ -15,12 +15,13 @@ import signal
 import sys
 
 
-def _worker(conn, renderer, camera, y0: int, y1: int) -> None:
+def _worker(conn, renderer, camera, index: int, count: int) -> None:
     # Workers never touch the terminal.  Ctrl-C is handled by the parent.
     try:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
     except (AttributeError, ValueError):
         pass
+    rows = range(index, renderer.pixel_height, count)
     while True:
         try:
             task = conn.recv()
@@ -31,7 +32,7 @@ def _worker(conn, renderer, camera, y0: int, y1: int) -> None:
         seq, x, y, z, yaw, pitch, now = task
         camera.teleport(x, y, z, yaw, pitch)
         try:
-            pixels = renderer.render_band(y0, y1, now)
+            pixels = renderer.render_rows(rows, now)
             payload = array.array("I", pixels).tobytes()
             conn.send((seq, True, payload))
         except Exception as exc:  # pragma: no cover - defensive worker path
@@ -39,38 +40,35 @@ def _worker(conn, renderer, camera, y0: int, y1: int) -> None:
 
 
 class ParallelRenderer:
-    """Render horizontal bands across forked worker processes."""
+    """Render interleaved pixel rows across forked worker processes."""
 
     def __init__(self, renderer, worker_count: int):
         self.renderer = renderer
         self.worker_count = max(1, min(worker_count, renderer.pixel_height))
         self._conns = []
         self._procs = []
-        self._bands = []
+        self._slices = []
         self._seq = 0
         self._ctx = mp.get_context("fork")
         self._start()
 
     def _start(self) -> None:
-        total = self.renderer.pixel_height
         n = self.worker_count
-        step = (total + n - 1) // n
+        # Each worker takes every n-th row.  The sky and the foreground cost
+        # very different amounts, so contiguous bands would leave most workers
+        # idle while the band covering the terrain did all the work.
         for k in range(n):
-            y0 = k * step
-            y1 = min(total, y0 + step)
-            if y0 >= y1:
-                break
             parent_conn, child_conn = self._ctx.Pipe()
             proc = self._ctx.Process(
                 target=_worker,
-                args=(child_conn, self.renderer, self.renderer.camera, y0, y1),
+                args=(child_conn, self.renderer, self.renderer.camera, k, n),
                 daemon=True,
             )
             proc.start()
             child_conn.close()
             self._conns.append(parent_conn)
             self._procs.append(proc)
-            self._bands.append((y0, y1))
+            self._slices.append((k, n))
 
     def render(self, now: float) -> list[int]:
         cam = self.renderer.camera
@@ -79,15 +77,19 @@ class ParallelRenderer:
         task = (seq, cam.x, cam.y, cam.z, cam.yaw, cam.pitch, now)
         for conn in self._conns:
             conn.send(task)
-        total = self.renderer.pixel_height * self.renderer.width
+        width = self.renderer.width
+        rows = self.renderer.pixel_height
+        total = rows * width
         pixels = [0] * total
-        for conn, (y0, y1) in zip(self._conns, self._bands):
+        for conn, (index, count) in zip(self._conns, self._slices):
             got_seq, ok, payload = conn.recv()
             if got_seq != seq or not ok:
                 raise RuntimeError(f"voxel worker failed: {payload}")
             arr = array.array("I")
             arr.frombytes(payload)
-            pixels[y0 * self.renderer.width:y1 * self.renderer.width] = arr
+            for j, row in enumerate(range(index, rows, count)):
+                base = row * width
+                pixels[base:base + width] = arr[j * width:(j + 1) * width]
         self.renderer.draw_entities(pixels, now)
         return pixels
 
