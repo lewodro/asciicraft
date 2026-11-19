@@ -6,6 +6,7 @@ import math
 import multiprocessing as mp
 import os
 import random
+from array import array
 
 from . import blocks
 from .noise import PerlinNoise
@@ -126,6 +127,75 @@ def _generate_surface(job) -> tuple[bytes, bytes]:
                       start + (h + 1 + fill) * local_stride:local_stride] = (
                     water_block * fill)
     return bytes(heights), bytes(piece)
+
+
+# Cave workers only read the surface grid and height map.  They are handed over
+# by fork inheritance rather than pickled: the full grid is 20 MB, so sending a
+# copy per worker would cost more than the carving itself.
+_CAVE_GRID = None
+_CAVE_HEIGHTS = None
+
+
+def _carve_caves(job) -> "array":
+    """Record the voxels one interleaved slice of cave stamps turns to air.
+
+    Carving only ever writes AIR over non-water voxels, and water is never
+    carved, so the final grid is the union of every stamp.  That makes the
+    stamps order-independent: workers can read the untouched surface grid, emit
+    index lists, and let the parent apply the union in one pass.
+    """
+    seed, width, depth, height, base_z, stop_z, step, index, count = job
+    grid = _CAVE_GRID
+    heights = _CAVE_HEIGHTS
+    noise = PerlinNoise(seed)
+    noise3 = noise.noise3
+    water = blocks.WATER
+    reach = step - 1
+    carved = array("I")
+    append = carved.append
+    total = len(range(base_z, stop_z, step))
+    for zi in range(index, total, count):
+        z = base_z + zi * step
+        z1 = z * 0.055
+        z2 = z * 0.105 - 19.0
+        z3 = z * 0.022 - 45.0
+        for x in range(2, width - 3, step):
+            h = heights[x + width * z]
+            upper = min(h - 2, height - 2 - reach)
+            top = min(h - 2, height - 2)
+            x1 = x * 0.055
+            x2 = x * 0.105 + 31.0
+            x3 = x * 0.022 + 91.0
+            for y in range(3, upper + 1, step):
+                c1 = noise3(x1, y * 0.075, z1)
+                c2 = noise3(x2, y * 0.135 + 17.0, z2)
+                cavern = noise3(x3, y * 0.041, z3)
+                if not (c1 * c1 + c2 * c2 * 1.35 < 0.0038 or cavern > 0.45):
+                    continue
+                for dy in range(step):
+                    yy = y + dy
+                    if yy > top:
+                        continue
+                    base = width * (z + depth * yy) + x
+                    for dz in range(step):
+                        start = base + width * dz
+                        # The 3-wide stamp can cross into a neighbouring column
+                        # whose lake surface sits above this one, so never
+                        # erode water.
+                        if (grid[start] == water
+                                or grid[start + 1] == water
+                                or grid[start + 2] == water):
+                            if grid[start] != water:
+                                append(start)
+                            if grid[start + 1] != water:
+                                append(start + 1)
+                            if grid[start + 2] != water:
+                                append(start + 2)
+                        else:
+                            append(start)
+                            append(start + 1)
+                            append(start + 2)
+    return carved
 
 
 class World:
@@ -284,45 +354,38 @@ class World:
         #    Sampling on a 3-voxel lattice and carving 3x3x3 cells cuts the
         #    noise cost by roughly 4x; the fields are smooth enough that the
         #    carved volume stays almost identical at terminal resolution.
+        #    Workers carve interleaved z slices and return index lists; the
+        #    union is applied once because carving is idempotent.
         cave_step = 3
-        reach = cave_step - 1
-        noise3 = noise.noise3
-        carve = b"\x00\x00\x00"
-        for z in range(2, depth - 3, cave_step):
-            z1 = z * 0.055
-            z2 = z * 0.105 - 19.0
-            z3 = z * 0.022 - 45.0
-            for x in range(2, width - 3, cave_step):
-                h = heights[x + width * z]
-                upper = min(h - 2, height - 2 - reach)
-                top = min(h - 2, height - 2)
-                x1 = x * 0.055
-                x2 = x * 0.105 + 31.0
-                x3 = x * 0.022 + 91.0
-                for y in range(3, upper + 1, cave_step):
-                    c1 = noise3(x1, y * 0.075, z1)
-                    c2 = noise3(x2, y * 0.135 + 17.0, z2)
-                    cavern = noise3(x3, y * 0.041, z3)
-                    if not (c1 * c1 + c2 * c2 * 1.35 < 0.0038 or cavern > 0.45):
-                        continue
-                    for dy in range(cave_step):
-                        yy = y + dy
-                        if yy > top:
-                            continue
-                        base = width * (z + depth * yy) + x
-                        for dz in range(cave_step):
-                            start = base + width * dz
-                            # The 3-wide stamp can cross into a neighbouring
-                            # column whose lake surface sits above this one, so
-                            # never erode water.
-                            if (grid[start] == blocks.WATER
-                                    or grid[start + 1] == blocks.WATER
-                                    or grid[start + 2] == blocks.WATER):
-                                for dx in range(cave_step):
-                                    if grid[start + dx] != blocks.WATER:
-                                        grid[start + dx] = blocks.AIR
-                            else:
-                                grid[start:start + cave_step] = carve
+        cave_workers = _generation_workers()
+        base_z = 2
+        stop_z = depth - 3
+        if cave_workers > 1 and width * depth * height >= 500_000:
+            global _CAVE_GRID, _CAVE_HEIGHTS
+            _CAVE_GRID = grid
+            _CAVE_HEIGHTS = heights
+            cave_jobs = [(self.seed, width, depth, height, base_z, stop_z,
+                          cave_step, k, cave_workers)
+                         for k in range(cave_workers)]
+            try:
+                ctx = mp.get_context("fork")
+                with ctx.Pool(cave_workers) as pool:
+                    carves = pool.map(_carve_caves, cave_jobs)
+            except (OSError, RuntimeError, ValueError):
+                carves = [_carve_caves(job) for job in cave_jobs]
+            finally:
+                _CAVE_GRID = None
+                _CAVE_HEIGHTS = None
+        else:
+            _CAVE_GRID = grid
+            _CAVE_HEIGHTS = heights
+            carves = [_carve_caves((self.seed, width, depth, height, base_z,
+                                    stop_z, cave_step, 0, 1))]
+            _CAVE_GRID = None
+            _CAVE_HEIGHTS = None
+        for carved in carves:
+            for index in carved:
+                grid[index] = 0
 
         self.timings["caves"] = time.perf_counter() - mark
         mark = time.perf_counter()
