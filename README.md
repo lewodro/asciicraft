@@ -42,7 +42,7 @@ printable characters and ANSI colour codes.
   grain, animated water and distance fog
 - Terminal build in **pure Python** (standard library only) and a matching
   **browser build** in two static files
-- Fork-parallel renderer: ~60 FPS at 160 × 48 characters on a laptop
+- Fork-parallel renderer: ~75 FPS at 160 × 48 characters on a laptop
 
 ## Quick start
 
@@ -55,10 +55,10 @@ cd asciicraft
 ```
 
 Requires Python **3.9+** on macOS, Linux or WSL. The first launch generates the
-full world in about 7 seconds, then opens the view. Press **Q** to quit.
+full world in about a second, then opens the view. Press **Q** to quit.
 
 ```bash
-./run.sh --small          # 256 × 128 × 80 world, generates in under a second
+./run.sh --small          # 256 × 128 × 80 world, generates in a fraction of a second
 ./run.sh --seed 42        # choose a world
 ./run.sh --look 0.7       # calmer look speed
 python3 -m voxelterm      # module entry point
@@ -184,12 +184,15 @@ cells, after world generation:
 
 | Mode | Pixels | FPS |
 | --- | --- | --- |
-| `ascii-color` | 160 × 48 | ≈ 60 |
-| `half` | 160 × 96 | ≈ 31 |
+| `ascii-color` | 160 × 48 | ≈ 75 |
+| `half` | 160 × 96 | ≈ 40 |
 
-Full Python world generation takes ≈ 7 s; the small world takes < 1 s. The
-renderer splits scanlines across forked workers and falls back to serial mode
-where `fork` is unavailable (`--serial` forces this).
+Full Python world generation takes ≈ 1.2 s on the same machine; the small world
+takes < 0.3 s. Height-field columns and cave stamps are split across forked
+workers, so the voxels are identical to a serial build (set
+`VOXELTERM_GEN_WORKERS=1` to force it). The renderer interleaves scanlines
+across workers, giving every worker a similar mix of sky and foreground, and
+falls back to serial mode where `fork` is unavailable (`--serial` forces this).
 
 ## CLI options
 
@@ -208,6 +211,8 @@ where `fork` is unavailable (`--serial` forces this).
 --snapshot FILE      render one frame to an ANSI file and exit
 --benchmark N        render N frames and report FPS
 ```
+
+Set `VOXELTERM_GEN_WORKERS=1` to disable fork-parallel world generation.
 
 ## Browser build
 

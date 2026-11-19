@@ -24,6 +24,15 @@ All notable changes to ASCIICRAFT are recorded here. The format follows
 
 ### Changed
 
+- World generation is roughly twice as fast: noise evaluation reuses one floor
+  per axis, inline fade polynomial and a gradient coefficient table; terrain
+  columns are written with strided slice copies; height-field columns and cave
+  stamps run on forked workers and merge deterministically. Seed 1337 produces
+  the same voxels and frames as before.
+- The renderer interleaves scanlines across workers instead of handing out
+  contiguous bands, so each worker gets a similar mix of sky and foreground.
+  A 9-worker 160 × 48 benchmark rose from about 77 to about 99 FPS with
+  byte-identical frames in every mode.
 - The ANSI encoder caches escape strings, emits a single background sequence
   per row and writes through a byte buffer, cutting encode time by roughly a
   quarter.
