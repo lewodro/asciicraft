@@ -6,7 +6,9 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pin the runner: ubuntu-latest moved to 26.04, which has no Python 3.9
+    # build, and the project still advertises 3.9 support.
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         python-version: ["3.9", "3.12"]
