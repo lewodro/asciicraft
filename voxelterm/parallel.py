@@ -90,7 +90,6 @@ class ParallelRenderer:
             for j, row in enumerate(range(index, rows, count)):
                 base = row * width
                 pixels[base:base + width] = arr[j * width:(j + 1) * width]
-        self.renderer.draw_entities(pixels, now)
         return pixels
 
     def close(self) -> None:

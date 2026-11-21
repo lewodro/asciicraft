@@ -59,7 +59,6 @@ print(JSON.stringify({
   biomeHash: biomeHash,
   biomeLen: world.biomes.length,
   structureCount: world.structures.length,
-  entityCount: world.entities.length,
   charKinds: Object.keys(counts).length,
   topChars: Object.keys(counts).sort(function (a, b) {
     return counts[b] - counts[a];

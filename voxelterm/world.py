@@ -211,7 +211,7 @@ class World:
         "seed", "width", "depth", "height", "sea_level",
         "grid", "height_map", "chunks", "spawn", "generation_time",
         "macro", "macro_dims", "macro_size", "macro_top", "timings",
-        "biomes", "structures", "entities",
+        "biomes", "structures",
     )
 
     def __init__(self, seed: int,
@@ -235,7 +235,6 @@ class World:
         self.timings: dict[str, float] = {}
         self.biomes = bytearray(width * depth)
         self.structures: list[tuple[int, int, str]] = []
-        self.entities: list[tuple[float, float, float, float, float, float, float]] = []
 
     # ------------------------------------------------------------------ access
     def index(self, x: int, y: int, z: int) -> int:
@@ -467,13 +466,7 @@ class World:
         self.timings["structures"] = time.perf_counter() - mark
         mark = time.perf_counter()
 
-        # 6. Birds: a handful of orbiting flocks that animate from the frame
-        #    time, so no per-frame entity state has to be replicated.
-        self._place_entities(rng)
-        self.timings["entities"] = time.perf_counter() - mark
-        mark = time.perf_counter()
-
-        # 7. Split the dense mirror into conventional chunks and build the
+        # 6. Split the dense mirror into conventional chunks and build the
         #    coarse occupancy pyramid used to skip empty air in the DDA.
         self._build_chunks()
         self.timings["chunks"] = time.perf_counter() - mark
@@ -485,12 +478,6 @@ class World:
         self.timings["macro_top"] = time.perf_counter() - mark
         mark = time.perf_counter()
         self.spawn = self._choose_spawn()
-        # One bird orbits in the spawn vista so the feature reads immediately.
-        sx, sy, sz, syaw, spitch = self.spawn
-        sfx = math.sin(syaw) * math.cos(spitch)
-        sfz = math.cos(syaw) * math.cos(spitch)
-        self.entities.append((sx + sfx * 26.0, sy + 7.0, sz + sfz * 26.0,
-                              4.0, 0.28, 0.0, 0.50))
         self.timings["spawn"] = time.perf_counter() - mark
         self.generation_time = time.perf_counter() - started
         return self
@@ -612,24 +599,6 @@ class World:
             i = (cx + ox) + width * ((cz + oz) + depth * (floor + 1))
             if grid[i] == blocks.AIR:
                 grid[i] = blocks.STONE
-
-    def _place_entities(self, rng: random.Random) -> None:
-        width, depth = self.width, self.depth
-        heights = self.height_map
-        for _ in range(28):
-            x = rng.randrange(20, width - 20)
-            z = rng.randrange(20, depth - 20)
-            h = heights[x + width * z]
-            if h <= self.sea_level + 1:
-                continue
-            y = float(h + 6 + rng.randrange(0, 8))
-            orbit = 3.0 + rng.random() * 5.0
-            spin = (0.18 + rng.random() * 0.22)
-            if rng.random() < 0.5:
-                spin = -spin
-            phase = rng.random() * math.tau
-            radius = 0.22 + rng.random() * 0.18
-            self.entities.append((float(x), y, float(z), orbit, spin, phase, radius))
 
     def _decorate_caves(self) -> None:
         width, depth, height = self.width, self.depth, self.height

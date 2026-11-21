@@ -13,8 +13,6 @@ All notable changes to ASCIICRAFT are recorded here. The format follows
   cactus density.
 - Cabins and ruins as explorable landmarks. The HUD points to the nearest one,
   counts sites as you reach them, and turns the counter over on a reseed.
-- Orbiting birds, drawn as projected blobs with per-frame occlusion, including
-  one flock visible from the spawn vista.
 - Cacti with ridged stems and arms in the desert biome.
 - Cave decoration: stalagmites, stalactites and exposed gold ore veins.
 - `tools/profile_render.py` reports per-stage world generation, raycast and
@@ -47,6 +45,8 @@ All notable changes to ASCIICRAFT are recorded here. The format follows
 
 ### Fixed
 
+- Removed the projected bird overlay: its near-white 1–3-cell blobs read as
+  random floating letters in the sky. The sky is now just the sky and fog.
 - `tools/screenshot.py` used a stale glyph lift constant, so README captures
   were darker than the real renderer. It now matches `ansi.py` exactly.
 

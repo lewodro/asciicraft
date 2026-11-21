@@ -37,7 +37,7 @@ printable characters and ANSI colour codes.
 - **About five minutes** to walk across at walking speed
 - Hills, lakes, beaches, caves, forests and snow-capped ridges, split into
   plains, forest, savanna and desert biomes
-- Cabins and ruins to find, with birds circling overhead and cacti in the dunes
+- Cabins and ruins to find, with cacti in the dunes
 - Truecolor ASCII with directional face lighting, ambient occlusion, procedural
   grain, animated water and distance fog
 - Terminal build in **pure Python** (standard library only) and a matching
@@ -241,7 +241,7 @@ fills to sea level; two intersecting 3D noise isosurfaces carve tunnels and
 caverns; a jittered lattice plants trees, and a low-frequency heat/moisture map
 selects a biome that tints the grass and controls tree and cactus density.
 Cabins and ruins are levelled onto flat dry ground, cave air gets dripstone and
-ore, and a handful of birds orbit fixed points. A dense `bytearray` holds the
+ore. A dense `bytearray` holds the
 voxels, an 8³ occupancy array lets the tracer skip empty air, and 16³ chunks are
 kept for inspection.
 
@@ -262,7 +262,7 @@ asciicraft/
 ├── CONTRIBUTING.md         setup, checks and review expectations
 ├── CHANGELOG.md            release history
 ├── voxelterm/              Python engine and terminal app
-│   ├── world.py            terrain, biomes, caves, structures, entities
+│   ├── world.py            terrain, biomes, caves, structures
 │   ├── raycaster.py        hierarchical voxel DDA + shader
 │   ├── ansi.py             70-glyph ramp + ANSI encoder
 │   ├── terminal.py         raw terminal + key parser
